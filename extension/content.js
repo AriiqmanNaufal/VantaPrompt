@@ -47,15 +47,42 @@ function isChatGPTDomain() {
 // Matches: xxxxxx-xx-xxxx or xxxxxxxxxxxx
 const sensitiveRegexes = {
   EMAIL: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g,
-  CREDIT_CARD: /\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13}|6(?:011|5[0-9]{2})[0-9]{12})\b/g,
-  PHONE: /\b(?:\+?6?01[0-9]-?[0-9]{7,8}|(?:\+?65|0)?[679]\d{7})\b/g,
+  CREDIT_CARD: /\b(?:4[0-9]{3}[ -]?[0-9]{4}[ -]?[0-9]{4}[ -]?[0-9]{4}|5[1-5][0-9]{2}[ -]?[0-9]{4}[ -]?[0-9]{4}[ -]?[0-9]{4}|3[47][0-9]{2}[ -]?[0-9]{6}[ -]?[0-9]{5}|6(?:011|5[0-9]{2})[ -]?[0-9]{4}[ -]?[0-9]{4}[ -]?[0-9]{4})\b/g,
+  PHONE: /\b(?:(?:\+?6?0?1[0-9])[-\s]?[0-9]{6,8}|(?:\+?65|0)?[679]\d{7})\b/ig,
   MALAYSIA_IC: /\b\d{6}-\d{2}-\d{4}\b/g,
-  AWS_KEY: /\b(AKIA|ASIA)[A-Z0-9]{16}\b/g,
+  MALAYSIA_IC_COMPACT: /\b\d{12}\b/g,
+  AWS_KEY: /\b(AKIA|ASIA)[A-Z0-9]{16}\b/gi,
   API_KEY_GENERIC: /\b(?:(?:api[_-]?key)|(?:secret[_-]?key))[:=]\s*['"]?[A-Za-z0-9\-_]{16,}['"]?\b/ig,
   UUID: /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/ig,
-  ACCOUNT_NUM: /\b(?:\d{6,18})\b/g,
+  ACCOUNT_NUM: /\b(?:\d{9,18})\b/g,
   SSN_US: /\b\d{3}-\d{2}-\d{4}\b/g,
 };
+
+const severityByType = {
+  EMAIL: "medium",
+  PHONE: "medium",
+  UUID: "high",
+  API_KEY_GENERIC: "high",
+  AWS_KEY: "high",
+  CREDIT_CARD: "critical",
+  ACCOUNT_NUM: "critical",
+  SSN_US: "critical",
+  MALAYSIA_IC: "critical",
+  MALAYSIA_IC_COMPACT: "critical",
+};
+
+function severityLevel(severity) {
+  switch (severity) {
+    case "medium":
+      return 2;
+    case "high":
+      return 3;
+    case "critical":
+      return 4;
+    default:
+      return 1;
+  }
+}
 
 function detect12DigitNumber(text = "") {
   if (!text) return [];
@@ -71,11 +98,23 @@ function detectSensitiveFragments(text = "") {
     const regex = new RegExp(pattern.source, pattern.flags);
     let match;
     while ((match = regex.exec(text)) !== null) {
-      findings.push({ type, fragment: match[0] });
+      findings.push({
+        type,
+        fragment: match[0],
+        severity: severityByType[type] || "critical",
+      });
       if (match.index === regex.lastIndex) regex.lastIndex++;
     }
   });
-  return findings;
+  return findings.filter(fragment => {
+    if (fragment.type === "ACCOUNT_NUM") {
+      const phonePattern = sensitiveRegexes.PHONE;
+      const malaysiaPattern = sensitiveRegexes.MALAYSIA_IC_COMPACT;
+      if (new RegExp(phonePattern.source, phonePattern.flags).test(fragment.fragment)) return false;
+      if (new RegExp(malaysiaPattern.source, malaysiaPattern.flags).test(fragment.fragment)) return false;
+    }
+    return true;
+  });
 }
 
 function has12DigitNumber(text = "") {
@@ -273,11 +312,15 @@ new MutationObserver(() => {
     if (platformInfo.supported) {
       setTimeout(() => {
         showAIPlatformModal();
-        chrome.runtime.sendMessage({ 
-          action: 'aiPlatformDetected',
-          platform: platformInfo.platform,
-          url: window.location.href 
-        });
+        try {
+          chrome.runtime.sendMessage({ 
+            action: 'aiPlatformDetected',
+            platform: platformInfo.platform,
+            url: window.location.href 
+          });
+        } catch (err) {
+          console.error('VantaPrompt: sendMessage failed (aiPlatformDetected)', err);
+        }
       }, 500);
     }
   }
@@ -849,12 +892,15 @@ function handlePromptChange(event) {
       const sensitiveFragments = detectSensitiveFragments(currentValue);
       const allMatches = [...new Set([...detectedNumbers, ...sensitiveFragments.map(f => f.fragment)])];
       if (allMatches.length > 0) {
-        console.log('VantaPrompt: Sensitive data detected in prompt:', {
-          matches: allMatches,
-          fragments: sensitiveFragments,
-          promptPreview: currentValue.substring(0, 100) + (currentValue.length > 100 ? '...' : ''),
-          fullPrompt: currentValue
-        });
+      console.log('VantaPrompt: Sensitive data detected in prompt:', {
+        fragments: sensitiveFragments,
+        maxSeverity:
+          sensitiveFragments.length > 0
+            ? Math.max(...sensitiveFragments.map((f) => severityLevel(f.severity)))
+            : severityLevel("critical"),
+        promptPreview: currentValue.substring(0, 100) + (currentValue.length > 100 ? '...' : ''),
+        fullPrompt: currentValue
+      });
         show12DigitToast(allMatches, maskSensitiveData(currentValue));
         console.warn('VantaPrompt: ⚠️ Sensitive data detected:', sensitiveFragments);
       } else {
@@ -867,16 +913,17 @@ function handlePromptChange(event) {
       lastPromptValue = currentValue;
       
       // Send prompt to background script
-      chrome.runtime.sendMessage({
-        action: 'promptChanged',
-        prompt: currentValue,
-        promptLength: currentValue.length,
-        has12DigitNumber: allMatches.length > 0,
-        detectedNumbers: allMatches,
-        sensitiveDetails: sensitiveFragments,
-        url: window.location.href,
-        timestamp: Date.now()
-      }, (response) => {
+      try {
+        chrome.runtime.sendMessage({
+          action: 'promptChanged',
+          prompt: currentValue,
+          promptLength: currentValue.length,
+          has12DigitNumber: allMatches.length > 0,
+          detectedNumbers: allMatches,
+          sensitiveDetails: sensitiveFragments,
+          url: window.location.href,
+          timestamp: Date.now()
+        }, (response) => {
         if (chrome.runtime.lastError) {
           // Only log errors if user was typing
           if (isUserTyping) {
@@ -884,6 +931,24 @@ function handlePromptChange(event) {
           }
         }
       });
+      } catch (err) {
+        console.error('VantaPrompt: sendMessage failed (promptChanged)', err);
+      }
+        chrome.runtime.sendMessage({
+          action: "logWarning",
+          matches: allMatches,
+          fragments: sensitiveFragments,
+          severity:
+            sensitiveFragments.length > 0
+              ? Math.max(...sensitiveFragments.map((f) => severityLevel(f.severity)))
+              : severityLevel("critical"),
+          source: isSupportedAIPlatform().platform,
+          original: {
+            prompt: currentValue,
+            consoleMatches: sensitiveFragments,
+          },
+          actionTaken: "masked",
+        });
     }
   }, 300); // 300ms debounce
 }
@@ -961,65 +1026,6 @@ if (platformInfo.supported) {
     }
   }, 3000);
 }
-
-// Expose debug function to window for manual testing
-window.vantapromptDebug = {
-  findPromptBox: findChatGPTPromptBox,
-  monitorPromptBox: monitorPromptBox,
-  getCurrentPrompt: getCurrentPromptValue,
-  findSendButton: findChatGPTSendButton,
-  testSendButton: () => {
-    const btn = findChatGPTSendButton();
-    if (btn) {
-      console.log('VantaPrompt: Send button found:', btn);
-      console.log('VantaPrompt: Current prompt:', getCurrentPromptValue());
-      handleSendClick({ type: 'manual-test' });
-    } else {
-      console.warn('VantaPrompt: Send button not found');
-    }
-  },
-  testMonitoring: () => {
-    console.log('VantaPrompt: Manual test triggered');
-    monitorPromptBox();
-    if (promptMonitor) {
-      console.log('VantaPrompt: Monitor is active:', promptMonitor);
-      handlePromptChange({ type: 'manual-test' });
-    } else {
-      console.warn('VantaPrompt: Monitor not found');
-    }
-  },
-  detect12DigitNumber: detect12DigitNumber,
-  has12DigitNumber: has12DigitNumber,
-  test12DigitRegex: (text) => {
-    if (!text) {
-      text = getCurrentPromptValue() || '123456-78-9012 or 123456789012';
-      console.log('VantaPrompt: No text provided, using current prompt or test string');
-    }
-    const matches = detect12DigitNumber(text);
-    console.log('VantaPrompt: 12-digit number detection test:', {
-      text: text,
-      matches: matches,
-      hasMatch: matches.length > 0,
-      testCases: {
-        'withDashes': detect12DigitNumber('123456-78-9012'),
-        'withoutDashes': detect12DigitNumber('123456789012'),
-        'mixed': detect12DigitNumber('Contact 123456-78-9012 or 987654321098')
-      }
-    });
-    return matches;
-  },
-  testCurrentPrompt: () => {
-    const prompt = getCurrentPromptValue();
-    console.log('VantaPrompt: Testing current prompt for 12-digit numbers:', {
-      prompt: prompt,
-      length: prompt.length,
-      detected: detect12DigitNumber(prompt)
-    });
-    return detect12DigitNumber(prompt);
-  }
-};
-
-// Debug functions available at window.vantapromptDebug (silent)
 
 // Listen for messages from popup or background
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {

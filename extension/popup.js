@@ -5,6 +5,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const promptMonitor = document.getElementById('promptMonitor');
   const promptContent = document.getElementById('promptContent');
   const promptInfo = document.getElementById('promptInfo');
+  const dbStatusBtn = document.getElementById('dbStatusBtn');
+  const dbStatus = document.getElementById('dbStatus');
   const detectionAlert = document.getElementById('detectionAlert');
   const detectedNumbers = document.getElementById('detectedNumbers');
 
@@ -34,6 +36,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // Send message to background script
     chrome.runtime.sendMessage({ action: 'buttonClicked' }, (response) => {
       console.log('Response from background:', response);
+    });
+  });
+
+  dbStatusBtn.addEventListener('click', () => {
+    dbStatus.textContent = 'Checking...';
+    chrome.runtime.sendMessage({ action: 'checkDbStatus' }, (response) => {
+      if (response?.success) {
+        dbStatus.textContent = `MongoDB connection: ${response.status}`;
+      } else {
+        dbStatus.textContent = 'Unable to reach backend.';
+      }
     });
   });
 });

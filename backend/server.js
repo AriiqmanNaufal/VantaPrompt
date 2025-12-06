@@ -1,7 +1,24 @@
 import express from "express";
+import dotenv from "dotenv";
+import mongoose from "mongoose";
 import dlpRoute from "./routes/dlpRoute.js";
 import llmRoute from "./routes/llmRoute.js";
 import { logEvent } from "./utils/logger.js";
+
+dotenv.config();
+
+const mongoUri = process.env.MONGO_URI;
+if (!mongoUri) {
+  throw new Error("MONGO_URI is required in .env for MongoDB connection");
+}
+
+mongoose
+  .connect(mongoUri)
+  .then(() => logEvent("Connected to MongoDB"))
+  .catch((error) => {
+    logEvent("MongoDB connection failed: " + error.message);
+    process.exit(1);
+  });
 
 const app = express();
 

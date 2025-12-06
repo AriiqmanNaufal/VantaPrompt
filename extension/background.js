@@ -1,3 +1,5 @@
+const BACKEND_BASE = "http://localhost:5000";
+
 // Background service worker (Manifest V3)
 chrome.runtime.onInstalled.addListener(() => {
   // Silent installation
@@ -100,6 +102,33 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     } else {
       sendResponse({ success: false, error: 'No tab information' });
     }
+  } else if (request.action === 'checkDbStatus') {
+    fetch(`${BACKEND_BASE}/dlp/db-status`)
+      .then((res) => res.json())
+      .then((data) => sendResponse({ success: true, status: data.status }))
+      .catch((err) => {
+        console.error("VantaPrompt: DB status fetch failed", err);
+        sendResponse({ success: false });
+      });
+    return true;
+  } else if (request.action === "logWarning") {
+    fetch(`${BACKEND_BASE}/dlp/logWarning`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        workstation: navigator.userAgent,
+        source: request.source || "unknown",
+        matches: request.matches || [],
+        fragments: request.fragments || [],
+        severity: request.severity || "critical",
+        actionTaken: request.actionTaken || "masked",
+        originalJson: request.original || {},
+      }),
+    }).catch((err) => console.error("VantaPrompt: logWarning failed", err));
+    sendResponse({ success: true });
+    return true;
   }
   return true; // Keep the message channel open for async response
 });
