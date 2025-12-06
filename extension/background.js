@@ -120,11 +120,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       body: JSON.stringify({
         workstation: navigator.userAgent,
         source: request.source || "unknown",
+        promptHash: request.promptHash || "",
         matches: request.matches || [],
         fragments: request.fragments || [],
+        detectedTypes: request.detectedTypes || [],
+        sanitizedPrompt: request.sanitizedPrompt || "",
         severity: request.severity || "critical",
+        allowed: !!request.allowed,
         actionTaken: request.actionTaken || "masked",
-        originalJson: request.original || {},
+        originalJsonHash: request.originalJsonHash || "",
       }),
     }).catch((err) => console.error("VantaPrompt: logWarning failed", err));
     sendResponse({ success: true });
@@ -200,4 +204,3 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 chrome.tabs.onRemoved.addListener((tabId) => {
   monitoredPrompts.delete(tabId);
 });
-

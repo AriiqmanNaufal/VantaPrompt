@@ -43,36 +43,224 @@ function isChatGPTDomain() {
   return isSupportedAIPlatform().supported;
 }
 
-// Regex to detect 12-digit number with or without dashes
-// Matches: xxxxxx-xx-xxxx or xxxxxxxxxxxx
-const sensitiveRegexes = {
-  EMAIL: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g,
-  CREDIT_CARD: /\b(?:4[0-9]{3}[ -]?[0-9]{4}[ -]?[0-9]{4}[ -]?[0-9]{4}|5[1-5][0-9]{2}[ -]?[0-9]{4}[ -]?[0-9]{4}[ -]?[0-9]{4}|3[47][0-9]{2}[ -]?[0-9]{6}[ -]?[0-9]{5}|6(?:011|5[0-9]{2})[ -]?[0-9]{4}[ -]?[0-9]{4}[ -]?[0-9]{4})\b/g,
-  PHONE: /\b(?:(?:\+?6?0?1[0-9])[-\s]?[0-9]{6,8}|(?:\+?65|0)?[679]\d{7})\b/ig,
-  MALAYSIA_IC: /\b\d{6}-\d{2}-\d{4}\b/g,
-  MALAYSIA_IC_COMPACT: /\b\d{12}\b/g,
-  AWS_KEY: /\b(AKIA|ASIA)[A-Z0-9]{16}\b/gi,
-  API_KEY_GENERIC: /\b(?:(?:api[_-]?key)|(?:secret[_-]?key))[:=]\s*['"]?[A-Za-z0-9\-_]{16,}['"]?\b/ig,
-  UUID: /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/ig,
-  ACCOUNT_NUM: /\b(?:\d{9,18})\b/g,
-  SSN_US: /\b\d{3}-\d{2}-\d{4}\b/g,
-};
+const BACKEND_API_BASE = "http://localhost:5000";
+const REGEXES_ENDPOINT = `${BACKEND_API_BASE}/dlp/regexes`;
 
-const severityByType = {
-  EMAIL: "medium",
-  PHONE: "medium",
-  UUID: "high",
-  API_KEY_GENERIC: "high",
-  AWS_KEY: "high",
-  CREDIT_CARD: "critical",
-  ACCOUNT_NUM: "critical",
-  SSN_US: "critical",
-  MALAYSIA_IC: "critical",
-  MALAYSIA_IC_COMPACT: "critical",
-};
+function isRuntimeAvailable() {
+  return !!(chrome.runtime && chrome.runtime.id);
+}
+
+const DEFAULT_REGEX_CONFIG = [
+  {
+    type: "EMAIL",
+    pattern: "\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\\b",
+    flags: "gi",
+    severity: "medium",
+    description: "Email addresses",
+  },
+  {
+    type: "PHONE",
+    pattern: "\\b(?:(?:\\+?6?01[0-9])[-\\s]?[0-9]{6,8}|(?:\\+?65|0)?[679]\\d{7})\\b",
+    flags: "ig",
+    severity: "medium",
+    description: "Malaysia/Singapore phone numbers",
+  },
+  {
+    type: "UUID",
+    pattern: "\\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\\b",
+    flags: "ig",
+    severity: "high",
+    description: "UUID/GUID",
+  },
+  {
+    type: "API_KEY_GENERIC",
+    pattern:
+      "\\b(?:(?:api[-]?key)|(?:secret[-]?key))[:=]\\s*['\\\"]?[A-Za-z0-9\\-_]{16,}['\\\"]?\\b",
+    flags: "ig",
+    severity: "high",
+    description: "Generic API keys",
+  },
+  {
+    type: "AWS_KEY",
+    pattern: "\\b(?:AKIA|ASIA)[A-Z0-9]{16}\\b",
+    flags: "gi",
+    severity: "high",
+    description: "AWS-style access keys",
+  },
+  {
+    type: "CREDIT_CARD",
+    pattern:
+      "\\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13}|6(?:011|5[0-9]{2})[0-9]{12})\\b",
+    flags: "g",
+    severity: "critical",
+    description: "Major credit cards",
+  },
+  {
+    type: "ACCOUNT_NUM",
+    pattern: "\\b(?:\\d{8}|\\d{10,16})\\b",
+    flags: "g",
+    severity: "critical",
+    description: "Generic financial account numbers",
+  },
+  {
+    type: "SSN_US",
+    pattern: "\\b\\d{3}-\\d{2}-\\d{4}\\b",
+    flags: "g",
+    severity: "critical",
+    description: "US Social Security numbers",
+  },
+  {
+    type: "MALAYSIA_IC",
+    pattern: "\\b\\d{6}-\\d{2}-\\d{4}\\b",
+    flags: "g",
+    severity: "critical",
+    description: "Malaysia IC with dashes",
+  },
+  {
+    type: "MALAYSIA_IC_COMPACT",
+    pattern: "\\b\\d{12}\\b",
+    flags: "g",
+    severity: "critical",
+    description: "Malaysia IC without dashes",
+  },
+  {
+    type: "PASSPORT",
+    pattern: "\\b[A-Z0-9]{6,10}\\b",
+    flags: "gi",
+    severity: "high",
+    description: "Generic passport numbers",
+  },
+  {
+    type: "VIRTUAL_ACCOUNT",
+    pattern: "\\b\\d{15,20}\\b",
+    flags: "g",
+    severity: "critical",
+    description: "Virtual Account Numbers for FPX / DuitNow VA",
+  },
+  {
+    type: "EWALLET_ACCOUNT",
+    pattern: "\\b\\d{8,15}\\b",
+    flags: "g",
+    severity: "critical",
+    description: "General e-wallet account identifiers",
+  },
+  {
+    type: "SWIFT_BIC",
+    pattern: "\\b[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}(?:[A-Z0-9]{3})?\\b",
+    flags: "gi",
+    severity: "medium",
+    description: "SWIFT/BIC financial institution codes",
+  },
+  {
+    type: "IBAN",
+    pattern: "\\b[A-Z]{2}\\d{2}[A-Z0-9]{11,30}\\b",
+    flags: "gi",
+    severity: "high",
+    description: "International Bank Account Numbers",
+  },
+];
+let runtimeRegexDefinitions = buildRegexDefinitions(DEFAULT_REGEX_CONFIG);
+let regexLoadPromise = null;
+const SENSITIVE_PAUSE_MS = 1500;
+let sensitiveAlertTimer = null;
+let pendingSensitiveDetails = null;
+let lastAlertSignature = "";
+
+function buildRegexDefinitions(list = []) {
+  if (!Array.isArray(list)) {
+    return [];
+  }
+
+  return list
+    .map((entry) => {
+      if (!entry || !entry.type || !entry.pattern) {
+        return null;
+      }
+      return {
+        type: entry.type,
+        pattern: entry.pattern,
+        flags: entry.flags || "g",
+        severity: (entry.severity || "critical").toLowerCase(),
+        description: entry.description || ""
+      };
+    })
+    .filter(Boolean);
+}
+
+async function loadRemoteRegexDefinitions() {
+  try {
+    const response = await fetch(REGEXES_ENDPOINT, { cache: "no-cache" });
+    if (!response.ok) {
+      throw new Error(`Unable to fetch regex definitions (${response.status})`);
+    }
+    const payload = await response.json();
+    if (payload?.success && Array.isArray(payload.regexes) && payload.regexes.length > 0) {
+      const remoteDefs = buildRegexDefinitions(payload.regexes);
+      if (remoteDefs.length > 0) {
+        runtimeRegexDefinitions = remoteDefs;
+        console.log(
+          "VantaPrompt: Loaded regex patterns from backend",
+          runtimeRegexDefinitions.map((def) => def.type)
+        );
+      } else {
+        console.warn("VantaPrompt: Remote regex response contained no valid entries");
+      }
+    }
+  } catch (error) {
+    console.error("VantaPrompt: Unable to load regex patterns from backend", error);
+  }
+}
+
+async function refreshRegexDefinitions() {
+  runtimeRegexDefinitions = buildRegexDefinitions(DEFAULT_REGEX_CONFIG);
+  try {
+    const response = await fetch(REGEXES_ENDPOINT, { cache: "no-cache" });
+    if (!response.ok) {
+      throw new Error(`Unable to fetch regex definitions (${response.status})`);
+    }
+    const payload = await response.json();
+    if (payload?.success && Array.isArray(payload.regexes) && payload.regexes.length > 0) {
+      const remoteDefs = buildRegexDefinitions(payload.regexes);
+      if (remoteDefs.length > 0) {
+        runtimeRegexDefinitions = remoteDefs;
+        console.log(
+          "VantaPrompt: Loaded regex patterns from backend",
+          runtimeRegexDefinitions.map((def) => def.type)
+        );
+      } else {
+        console.warn("VantaPrompt: Remote regex response contained no valid entries");
+      }
+    }
+  } catch (error) {
+    console.error("VantaPrompt: Unable to load regex patterns from backend", error);
+  }
+}
+
+function ensureRegexDefinitionsLoaded() {
+  if (!regexLoadPromise) {
+    regexLoadPromise = refreshRegexDefinitions();
+  }
+  return regexLoadPromise;
+}
+
+function startMonitoringWhenReady(delay = 0) {
+  setTimeout(() => {
+    refreshRegexDefinitions()
+      .catch(() => {
+        // Error already logged when loading
+      })
+      .finally(() => {
+        startPromptMonitoring();
+      });
+  }, delay);
+}
+
+function findRegexDefinition(type) {
+  return runtimeRegexDefinitions.find((def) => def.type === type);
+}
 
 function severityLevel(severity) {
-  switch (severity) {
+  switch ((severity || "").toLowerCase()) {
     case "medium":
       return 2;
     case "high":
@@ -84,6 +272,22 @@ function severityLevel(severity) {
   }
 }
 
+function highestSeverityString(fragments = []) {
+  if (!fragments.length) {
+    return "critical";
+  }
+  return fragments.reduce((current, fragment) => {
+    if (
+      severityLevel(fragment.severity) > severityLevel(current)
+    ) {
+      return fragment.severity;
+    }
+    return current;
+  }, fragments[0].severity || "critical");
+}
+
+ensureRegexDefinitionsLoaded();
+
 function detect12DigitNumber(text = "") {
   if (!text) return [];
   const regex = /(\d{6}-\d{2}-\d{4}|\d{12})/g;
@@ -94,24 +298,43 @@ function detect12DigitNumber(text = "") {
 function detectSensitiveFragments(text = "") {
   if (!text) return [];
   const findings = [];
-  Object.entries(sensitiveRegexes).forEach(([type, pattern]) => {
-    const regex = new RegExp(pattern.source, pattern.flags);
+  runtimeRegexDefinitions.forEach((def) => {
+    if (!def.pattern || !def.type) return;
+    const regex = new RegExp(def.pattern, def.flags || "g");
     let match;
     while ((match = regex.exec(text)) !== null) {
       findings.push({
-        type,
+        type: def.type,
         fragment: match[0],
-        severity: severityByType[type] || "critical",
+        severity: def.severity || "critical",
       });
-      if (match.index === regex.lastIndex) regex.lastIndex++;
+      if (match.index === regex.lastIndex) {
+        regex.lastIndex++;
+      }
     }
   });
-  return findings.filter(fragment => {
-    if (fragment.type === "ACCOUNT_NUM") {
-      const phonePattern = sensitiveRegexes.PHONE;
-      const malaysiaPattern = sensitiveRegexes.MALAYSIA_IC_COMPACT;
-      if (new RegExp(phonePattern.source, phonePattern.flags).test(fragment.fragment)) return false;
-      if (new RegExp(malaysiaPattern.source, malaysiaPattern.flags).test(fragment.fragment)) return false;
+
+  const phonePattern = findRegexDefinition("PHONE");
+  const malaysiaPattern = findRegexDefinition("MALAYSIA_IC_COMPACT");
+
+  return findings.filter((fragment) => {
+    if (fragment.type !== "ACCOUNT_NUM") {
+      return true;
+    }
+    if (phonePattern) {
+      const phoneRegex = new RegExp(phonePattern.pattern, phonePattern.flags || "g");
+      if (phoneRegex.test(fragment.fragment)) {
+        return false;
+      }
+    }
+    if (malaysiaPattern) {
+      const malaysiaRegex = new RegExp(
+        malaysiaPattern.pattern,
+        malaysiaPattern.flags || "g"
+      );
+      if (malaysiaRegex.test(fragment.fragment)) {
+        return false;
+      }
     }
     return true;
   });
@@ -125,12 +348,110 @@ function maskSensitiveData(text = "") {
   if (!text) return "";
   let masked = text;
   const fragments = detectSensitiveFragments(text);
-  const digitMatches = detect12DigitNumber(text);
-  const allMatches = [...new Set([...fragments.map(f => f.fragment), ...digitMatches])];
-  allMatches.forEach(match => {
-    masked = masked.split(match).join("[SENSITIVE_DATA]");
+  fragments.forEach(({ fragment, type }) => {
+    if (!fragment) {
+      return;
+    }
+    const placeholder = `[${type || "SENSITIVE"}]`;
+    masked = masked.split(fragment).join(placeholder);
   });
   return masked;
+}
+
+async function hashFragment(value = "") {
+  if (!value) {
+    return "";
+  }
+  const encoder = new TextEncoder();
+  const data = encoder.encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(digest));
+  return hashArray.map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function hashFragments(list = []) {
+  if (!Array.isArray(list) || list.length === 0) {
+    return [];
+  }
+  const mapped = await Promise.all(
+    list.map(async (fragment) => ({
+      type: fragment.type,
+      severity: fragment.severity,
+      fragmentHash: await hashFragment(fragment.fragment),
+    }))
+  );
+  return mapped;
+}
+
+function scheduleSensitiveAlert() {
+  if (sensitiveAlertTimer) {
+    clearTimeout(sensitiveAlertTimer);
+  }
+  sensitiveAlertTimer = setTimeout(() => {
+    triggerSensitiveAlert();
+  }, SENSITIVE_PAUSE_MS);
+}
+
+async function triggerSensitiveAlert() {
+  if (!pendingSensitiveDetails) {
+    return;
+  }
+  const signature = pendingSensitiveDetails.signature || "";
+  if (signature && signature === lastAlertSignature) {
+    pendingSensitiveDetails = null;
+    return;
+  }
+  lastAlertSignature = signature;
+  const summary = pendingSensitiveDetails.detectedTypes.length
+    ? `Detected: ${pendingSensitiveDetails.detectedTypes.join(", ")} • Severity: ${pendingSensitiveDetails.severity}`
+    : `Severity: ${pendingSensitiveDetails.severity}`;
+  showSensitiveToast(pendingSensitiveDetails.maskedPrompt, summary);
+  const hashedFragments = await hashFragments(pendingSensitiveDetails.fragments);
+  console.warn("VantaPrompt: ⚠️ Sensitive data detected:", hashedFragments);
+  sendSensitiveWarning({
+    fragments: hashedFragments,
+    severity: pendingSensitiveDetails.severity,
+    detectedTypes: pendingSensitiveDetails.detectedTypes,
+    matches: pendingSensitiveDetails.matches,
+    prompt: pendingSensitiveDetails.prompt,
+    sanitizedPrompt: pendingSensitiveDetails.maskedPrompt,
+  });
+  pendingSensitiveDetails = null;
+  sensitiveAlertTimer = null;
+}
+
+async function sendSensitiveWarning(details = {}) {
+  if (!isRuntimeAvailable()) {
+    console.warn("VantaPrompt: Skipping logWarning because runtime context was invalidated");
+    return;
+  }
+  try {
+    const promptHash = await hashFragment(details.prompt || "");
+    const originalJsonString = JSON.stringify({
+      prompt: details.prompt || "",
+      consoleMatches: details.fragments || [],
+    });
+    const originalJsonHash = await hashFragment(originalJsonString);
+    chrome.runtime.sendMessage({
+      action: "logWarning",
+      matches: details.matches || [],
+      fragments: details.fragments || [],
+      severity: details.severity || "critical",
+      detectedTypes: details.detectedTypes || [],
+      source: isSupportedAIPlatform().platform,
+      promptHash,
+      sanitizedPrompt: details.sanitizedPrompt || "",
+      actionTaken: "masked",
+      allowed: false,
+      originalJsonHash,
+    }, () => {
+      if (chrome.runtime.lastError) {
+        console.error("VantaPrompt: Error sending logWarning:", chrome.runtime.lastError);
+      }
+    });
+  } catch (err) {
+    console.error("VantaPrompt: logWarning send failed", err);
+  }
 }
 
 // Create and show modal popup for AI platforms
@@ -286,6 +607,7 @@ function init() {
     // Wait a bit for page to fully load
     setTimeout(() => {
       showAIPlatformModal();
+      refreshRegexDefinitions().catch(() => {});
       // Notify background script
       chrome.runtime.sendMessage({ 
         action: 'aiPlatformDetected',
@@ -312,6 +634,7 @@ new MutationObserver(() => {
     if (platformInfo.supported) {
       setTimeout(() => {
         showAIPlatformModal();
+        refreshRegexDefinitions().catch(() => {});
         try {
           chrome.runtime.sendMessage({ 
             action: 'aiPlatformDetected',
@@ -617,25 +940,29 @@ function logFinalPrompt(prompt) {
   }
 }
 
-// Toast/notification for 12-digit detection
-function show12DigitToast(numbers = [], maskedPrompt = "") {
-  let toast = document.getElementById('vantaprompt-12digit-toast');
+// Toast/notification for sensitive data detection
+function showSensitiveToast(maskedPrompt = "", summary = "") {
+  let toast = document.getElementById("vantaprompt-sensitive-toast");
   if (!toast) {
-    toast = document.createElement('div');
-    toast.id = 'vantaprompt-12digit-toast';
+    toast = document.createElement("div");
+    toast.id = "vantaprompt-sensitive-toast";
     toast.innerHTML = `
       <span style="font-size:18px;">⚠️</span>
-      <strong style="flex:1;">12-digit number detected</strong>
-      <div id="vantaprompt-12digit-content" style="flex:1; font-family: 'Courier New', monospace;"></div>
-      <button id="vantaprompt-12digit-copy" class="toast-copy-btn">Copy masked prompt</button>
+      <div style="flex:1; display:flex; flex-direction:column; gap:4px;">
+        <strong style="font-size:14px;">VantaPrompt Alert</strong>
+        <span id="vantaprompt-sensitive-summary" style="font-size:12px; color:#856404;">
+          Sensitive data detected
+        </span>
+      </div>
+      <div id="vantaprompt-sensitive-content" style="flex:1; font-family: 'Courier New', monospace;"></div>
+      <button id="vantaprompt-sensitive-copy" class="toast-copy-btn">Copy masked prompt</button>
     `;
     document.body.appendChild(toast);
-    // Inject CSS only once
-    if (!document.getElementById('vantaprompt-12digit-toast-style')) {
-      const style = document.createElement('style');
-      style.id = 'vantaprompt-12digit-toast-style';
+    if (!document.getElementById("vantaprompt-sensitive-toast-style")) {
+      const style = document.createElement("style");
+      style.id = "vantaprompt-sensitive-toast-style";
       style.textContent = `
-        #vantaprompt-12digit-toast {
+        #vantaprompt-sensitive-toast {
           position: fixed; right: 32px; bottom: 32px;
           background: #fff3cd;
           color: #856404;
@@ -652,15 +979,18 @@ function show12DigitToast(numbers = [], maskedPrompt = "") {
           transition: opacity 0.3s, transform 0.3s;
           transform: translateY(40px);
         }
-        #vantaprompt-12digit-toast.show {
+        #vantaprompt-sensitive-toast.show {
           opacity: 1;
           pointer-events: auto;
           transform: translateY(0);
         }
-        #vantaprompt-12digit-content {
-          color: #212529; font-family: 'Courier New', monospace; display:inline-block; margin-left: 4px;
+        #vantaprompt-sensitive-content {
+          color: #212529;
+          font-family: 'Courier New', monospace;
+          display:inline-block;
+          margin-left: 4px;
         }
-        #vantaprompt-12digit-toast .toast-copy-btn {
+        #vantaprompt-sensitive-toast .toast-copy-btn {
           border-radius: 4px;
           border: 1px solid #856404;
           background: #ffeeba;
@@ -674,36 +1004,39 @@ function show12DigitToast(numbers = [], maskedPrompt = "") {
       document.head.appendChild(style);
     }
   }
-  // Set content
-  const content = toast.querySelector('#vantaprompt-12digit-content');
-  if (content) {
-    content.textContent = maskedPrompt || numbers.join(', ');
+
+  const summaryEl = toast.querySelector("#vantaprompt-sensitive-summary");
+  if (summaryEl && summary) {
+    summaryEl.textContent = summary;
   }
-  const copyButton = toast.querySelector('#vantaprompt-12digit-copy');
+
+  const content = toast.querySelector("#vantaprompt-sensitive-content");
+  if (content) {
+    content.textContent = maskedPrompt;
+  }
+  const copyButton = toast.querySelector("#vantaprompt-sensitive-copy");
   if (copyButton) {
     copyButton.disabled = false;
-    copyButton.textContent = 'Copy masked prompt';
+    copyButton.textContent = "Copy masked prompt";
     copyButton.onclick = async () => {
       try {
-        await navigator.clipboard.writeText(maskedPrompt || content.textContent);
-        copyButton.textContent = 'Copied!';
-        hide12DigitToast();
+        await navigator.clipboard.writeText(maskedPrompt);
+        copyButton.textContent = "Copied!";
+        hideSensitiveToast();
       } catch (err) {
-        copyButton.textContent = 'Copy failed';
-        console.error('VantaPrompt: Clipboard copy failed', err);
+        copyButton.textContent = "Copy failed";
+        console.error("VantaPrompt: Clipboard copy failed", err);
       }
     };
   }
-  // Show toast
-  toast.classList.add('show');
+  toast.classList.add("show");
   toast._vantapromptTimer && clearTimeout(toast._vantapromptTimer);
-  // Hide only after user copies
 }
 
-function hide12DigitToast() {
-  const toast = document.getElementById('vantaprompt-12digit-toast');
+function hideSensitiveToast() {
+  const toast = document.getElementById("vantaprompt-sensitive-toast");
   if (toast) {
-    toast.classList.remove('show');
+    toast.classList.remove("show");
     toast._vantapromptTimer && clearTimeout(toast._vantapromptTimer);
   }
 }
@@ -890,65 +1223,65 @@ function handlePromptChange(event) {
       // Detect 12-digit numbers in the prompt
       const detectedNumbers = detect12DigitNumber(currentValue);
       const sensitiveFragments = detectSensitiveFragments(currentValue);
-      const allMatches = [...new Set([...detectedNumbers, ...sensitiveFragments.map(f => f.fragment)])];
-      if (allMatches.length > 0) {
-      console.log('VantaPrompt: Sensitive data detected in prompt:', {
-        fragments: sensitiveFragments,
-        maxSeverity:
-          sensitiveFragments.length > 0
-            ? Math.max(...sensitiveFragments.map((f) => severityLevel(f.severity)))
-            : severityLevel("critical"),
-        promptPreview: currentValue.substring(0, 100) + (currentValue.length > 100 ? '...' : ''),
-        fullPrompt: currentValue
-      });
-        show12DigitToast(allMatches, maskSensitiveData(currentValue));
-        console.warn('VantaPrompt: ⚠️ Sensitive data detected:', sensitiveFragments);
-      } else {
-        // Debug: log when no numbers detected (only if text seems like it might contain numbers)
-        if (/\d/.test(currentValue) && currentValue.length > 10) {
-          console.log('VantaPrompt: No 12-digit numbers detected. Text contains digits but not in expected format.');
-        }
-      }
-      
-      lastPromptValue = currentValue;
-      
-      // Send prompt to background script
-      try {
-        chrome.runtime.sendMessage({
-          action: 'promptChanged',
-          prompt: currentValue,
-          promptLength: currentValue.length,
-          has12DigitNumber: allMatches.length > 0,
-          detectedNumbers: allMatches,
-          sensitiveDetails: sensitiveFragments,
-          url: window.location.href,
-          timestamp: Date.now()
-        }, (response) => {
-        if (chrome.runtime.lastError) {
-          // Only log errors if user was typing
-          if (isUserTyping) {
-            console.error('VantaPrompt: Error sending prompt:', chrome.runtime.lastError);
-          }
-        }
-      });
-      } catch (err) {
-        console.error('VantaPrompt: sendMessage failed (promptChanged)', err);
-      }
-        chrome.runtime.sendMessage({
-          action: "logWarning",
-          matches: allMatches,
+      const severity = highestSeverityString(sensitiveFragments);
+      const detectedTypes = [
+        ...new Set(sensitiveFragments.map((fragment) => fragment.type)),
+      ];
+      const uniqueMatches = [...new Set([...detectedNumbers, ...sensitiveFragments.map((f) => f.fragment)])];
+      const maskedPrompt = maskSensitiveData(currentValue);
+      if (sensitiveFragments.length > 0) {
+        const signature = sensitiveFragments
+          .map((fragment) => `${fragment.type}:${fragment.fragment}`)
+          .sort()
+          .join("|");
+        pendingSensitiveDetails = {
           fragments: sensitiveFragments,
-          severity:
-            sensitiveFragments.length > 0
-              ? Math.max(...sensitiveFragments.map((f) => severityLevel(f.severity)))
-              : severityLevel("critical"),
-          source: isSupportedAIPlatform().platform,
-          original: {
+          severity,
+          detectedTypes,
+          prompt: currentValue,
+          matches: uniqueMatches,
+          maskedPrompt,
+          signature,
+        };
+        scheduleSensitiveAlert();
+      } else {
+        if (sensitiveAlertTimer) {
+          clearTimeout(sensitiveAlertTimer);
+          sensitiveAlertTimer = null;
+        }
+        pendingSensitiveDetails = null;
+        if (/\d/.test(currentValue) && currentValue.length > 10) {
+          console.log(
+            "VantaPrompt: No sensitive regex matches detected. Text contains digits but not in expected format."
+          );
+        }
+      }
+
+      lastPromptValue = currentValue;
+
+      if (isRuntimeAvailable()) {
+        try {
+          chrome.runtime.sendMessage({
+            action: "promptChanged",
             prompt: currentValue,
-            consoleMatches: sensitiveFragments,
-          },
-          actionTaken: "masked",
-        });
+            promptLength: currentValue.length,
+            has12DigitNumber: uniqueMatches.length > 0,
+            detectedNumbers: uniqueMatches,
+            sensitiveDetails: sensitiveFragments,
+            url: window.location.href,
+            timestamp: Date.now(),
+          }, () => {
+            if (chrome.runtime.lastError && isUserTyping) {
+              console.error("VantaPrompt: Error sending prompt:", chrome.runtime.lastError);
+            }
+          });
+        } catch (err) {
+          console.error("VantaPrompt: sendMessage failed (promptChanged)", err);
+        }
+      } else if (isUserTyping) {
+        console.warn("VantaPrompt: Skipping promptChanged message because runtime context was invalidated");
+      }
+
     }
   }, 300); // 300ms debounce
 }
@@ -1008,21 +1341,22 @@ function startPromptMonitoring() {
 // Initialize prompt monitoring when on supported AI platform
 const platformInfo = isSupportedAIPlatform();
 if (platformInfo.supported) {
-  // Wait for page to load
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-      setTimeout(startPromptMonitoring, 1000);
+  const scheduleMonitoring = (delay = 1000) => startMonitoringWhenReady(delay);
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => {
+      scheduleMonitoring(1000);
     });
   } else {
-    setTimeout(startPromptMonitoring, 1000);
+    scheduleMonitoring(1000);
   }
-  
-  // Also start monitoring after a longer delay in case React hasn't loaded yet
+
+  // Retry later in case React finishes later
   setTimeout(() => {
     const currentPlatformInfo = isSupportedAIPlatform();
     if (currentPlatformInfo.supported && !promptMonitor) {
-      console.log('VantaPrompt: Retrying to find prompt box after delay...');
-      startPromptMonitoring();
+      console.log("VantaPrompt: Retrying to find prompt box after delay...");
+      scheduleMonitoring(0);
     }
   }, 3000);
 }
@@ -1046,4 +1380,3 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
   return true;
 });
-

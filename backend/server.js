@@ -1,4 +1,5 @@
 import express from "express";
+import cors from "cors";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
 import dlpRoute from "./routes/dlpRoute.js";
@@ -26,8 +27,15 @@ mongoose
 
 const app = express();
 
-app.use(express.json({ limit: "1mb" }));
+// Enable CORS + JSON body parsing for all incoming requests
+app.use(cors());
+app.use(express.json());
 
+// Route groups keep DLP checks and LLM forwarding logic isolated
+app.use("/dlp", dlpRoute);
+app.use("/llm", llmRoute);
+
+// Minimal health endpoint for ops checks
 app.get("/health", (_req, res) => {
   res.json({ service: "VantaPrompt backend", status: "ok" });
 });

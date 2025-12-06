@@ -49,36 +49,19 @@ export async function logWarning(req, res) {
       req.headers["x-forwarded-for"]?.split(",").shift()?.trim() ||
       req.socket?.remoteAddress ||
       "";
-
-    const fragments = sanitizeFragments(req.body.fragments);
-    const detectedTypes = dedupeStrings([
-      ...(req.body.detectedTypes || []),
-      ...fragments.map((fragment) => fragment.type)
-    ]);
-    const matches = dedupeStrings(req.body.matches);
-
-    const timestampValue = req.body.timestamp
-      ? new Date(req.body.timestamp)
-      : new Date();
-    const timestamp = Number.isNaN(timestampValue.getTime())
-      ? new Date()
-      : timestampValue;
-
-    const normalizedSeverity = normalizeSeverity(req.body.severity);
-
-    const warning = {
-      workspaceId: req.body.workspaceId || req.headers["x-workspace-id"],
-      userId: req.body.userId || req.headers["x-user-id"],
+    const fragments = req.body.fragments || [];
+    const body = {
       workstation: req.body.workstation || req.headers["user-agent"] || "unknown",
       source: req.body.source || "unknown",
-      matches,
+      promptHash: req.body.promptHash || "",
+      sanitizedPrompt: req.body.sanitizedPrompt || "",
+      matches: req.body.matches || [],
+      detectedTypes: fragments.map((f) => f.type).filter(Boolean),
       fragments,
-      detectedTypes,
-      severity: req.body.severity ?? normalizedSeverity,
-      normalizedSeverity,
-      allowed: typeof req.body.allowed === "boolean" ? req.body.allowed : false,
+      severity: req.body.severity || "critical",
+      allowed: !!req.body.allowed,
       actionTaken: req.body.actionTaken || "masked",
-      originalJson: req.body.originalJson || req.body.original || {},
+      originalJsonHash: req.body.originalJsonHash || "",
       ipAddress,
       timestamp
     };
@@ -97,4 +80,3 @@ export async function logWarning(req, res) {
       .json({ success: false, message: "Unable to log warning", error: error.message });
   }
 }
-
