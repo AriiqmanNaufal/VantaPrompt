@@ -1,6 +1,7 @@
 import React from "react";
 import Link from "next/link";
 import styles from "./OneOnOneDashboard.module.css";
+import { detectionEvent } from "../data/reportData";
 
 type NavItem = {
   label: string;
@@ -39,7 +40,7 @@ type ChartCard = {
   accent: string;
 };
 
-const navItems: NavItem[] = [
+export const navItems: NavItem[] = [
   { label: "Overview", abbr: "O", href: "/", key: "overview" },
   { label: "Prompts Monitoring", abbr: "OD", href: "/prompts-monitoring", key: "prompts" },
 ];
@@ -85,30 +86,6 @@ const results: ResultRow[] = [
     date: "11 Dec 2023",
   },
 ];
-
-const detectionEvent = {
-  _id: "6933dc002daccee88be60e65",
-  workspaceId: "acme-123",
-  userId: "user-42",
-  originalHash: "37e4d98fc2df14cf48a4ca470ab4e8144e991496c37d360eabb93be86b17d2dc",
-  redactedText: "Email my credit card [REDACTED:CREDIT_CARD]to [REDACTED:EMAIL]",
-  detectedTypes: ["EMAIL", "CREDIT_CARD"],
-  findings: [
-    {
-      type: "EMAIL",
-      fragmentHash: "af3c82544f648b38dc7d403473bb4b957cd04353afd9096fa871c1e469656c8c",
-    },
-    {
-      type: "CREDIT_CARD",
-      fragmentHash: "6a7e0e79b018d08c9d1bb20be79999a7778399f7ee17258b3a0d36d4b4a7bec5",
-    },
-  ],
-  severity: "critical",
-  allowed: false,
-  actionTaken: "blocked",
-  timestamp: "2025-12-06T07:32:16.357+00:00",
-  source: "web",
-};
 
 const typeCounts = detectionEvent.findings.reduce<Record<string, number>>((acc, finding) => {
   acc[finding.type] = (acc[finding.type] ?? 0) + 1;
@@ -193,14 +170,14 @@ const iconMap: Record<FilterField["icon"], React.ReactNode> = {
   ),
 };
 
-const BellIcon = () => (
+export const BellIcon = () => (
   <svg viewBox="0 0 24 24" aria-hidden="true">
     <path d="M6.5 9.5a5.5 5.5 0 0 1 11 0c0 5 1.5 6.5 1.5 6.5H5s1.5-1.5 1.5-6.5" />
     <path d="M10 20a2 2 0 0 0 4 0" />
   </svg>
 );
 
-const GridIcon = () => (
+export const GridIcon = () => (
   <svg viewBox="0 0 24 24" aria-hidden="true">
     <rect x="4" y="4" width="5" height="5" />
     <rect x="10.5" y="4" width="5" height="5" />
@@ -209,7 +186,7 @@ const GridIcon = () => (
   </svg>
 );
 
-const SettingsIcon = () => (
+export const SettingsIcon = () => (
   <svg viewBox="0 0 24 24" aria-hidden="true">
     <circle cx="12" cy="12" r="3" />
     <path d="M19 12a7 7 0 0 0-.1-1.2l2.1-1.5-2-3.5-2.4 1a7.3 7.3 0 0 0-2-1.2l-.3-2.6h-4l-.3 2.6a7.3 7.3 0 0 0-2 1.2l-2.4-1-2 3.5 2.1 1.5A7 7 0 0 0 5 12a7 7 0 0 0 .1 1.2l-2.1 1.5 2 3.5 2.4-1a7.3 7.3 0 0 0 2 1.2l.3 2.6h4l.3-2.6a7.3 7.3 0 0 0 2-1.2l2.4 1 2-3.5-2.1-1.5a7 7 0 0 0 .1-1.2z" />
@@ -414,9 +391,9 @@ export const OneOnOneDashboard: React.FC<OneOnOneDashboardProps> = ({
                   <td className={styles.typeCell}>{row.contentType}</td>
                   <td className={styles.dateCell}>{row.date}</td>
                   <td className={styles.actionCell}>
-                    <button className={styles.viewButton} type="button">
+                    <Link href={`/report/${row.id}`} className={styles.viewButton}>
                       View
-                    </button>
+                    </Link>
                   </td>
                 </tr>
               ))}
