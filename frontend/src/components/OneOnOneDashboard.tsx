@@ -127,6 +127,63 @@ const chartCards: ChartCard[] = [
   },
 ];
 
+const overviewStats = [
+  {
+    label: "Total prompts processed",
+    value: "128",
+    change: "+12% vs last week",
+  },
+  {
+    label: "Blocked prompts",
+    value: "42",
+    change: "33% of total",
+  },
+  {
+    label: "Masked prompts",
+    value: "61",
+    change: "48% masked",
+  },
+];
+
+const severityDistribution = [
+  { label: "Critical", value: 40, color: "#ef4444" },
+  { label: "High", value: 28, color: "#f97316" },
+  { label: "Medium", value: 20, color: "#fbbf24" },
+  { label: "Low", value: 12, color: "#34d399" },
+];
+
+const decisionBreakdown = [
+  { label: "Blocked", value: 60, color: "#a855f7" },
+  { label: "Allowed", value: 25, color: "#0ea5e9" },
+  { label: "Escalated", value: 15, color: "#c084fc" },
+];
+
+const sensitivityTypes = [
+  { label: "Email", value: 62 },
+  { label: "Credit card", value: 28 },
+  { label: "SSN", value: 15 },
+  { label: "API key", value: 10 },
+];
+
+const volumeTrend = [12, 18, 20, 17, 23, 29, 26, 31];
+
+const providerComparison = [
+  { provider: "OpenAI", blocked: "18", allowed: "6" },
+  { provider: "Anthropic", blocked: "11", allowed: "5" },
+  { provider: "Google", blocked: "8", allowed: "4" },
+];
+
+const createConicGradient = (data: { value: number; color: string }[]) => {
+  let start = 0;
+  const segments: string[] = [];
+  data.forEach((item) => {
+    const end = start + item.value;
+    segments.push(`${item.color} ${start}% ${end}%`);
+    start = end;
+  });
+  return { background: `conic-gradient(${segments.join(", ")})` };
+};
+
 // const promptRows = [
 //   {
 //     id: 1,
@@ -240,7 +297,7 @@ export const OneOnOneDashboard: React.FC<OneOnOneDashboardProps> = ({
             <h1 className={styles.pageTitle}>
               {activeSection === "overview" ? "Overview" : "Prompts Monitoring"}
             </h1>
-            <div className={styles.subNav}>
+            {/* <div className={styles.subNav}>
               <button
                 type="button"
                 className={`${styles.subNavButton} ${styles.subNavButtonActive}`}
@@ -250,7 +307,7 @@ export const OneOnOneDashboard: React.FC<OneOnOneDashboardProps> = ({
               <button type="button" className={styles.subNavButton}>
                 Search
               </button>
-            </div>
+            </div> */}
           </div>
           <div className={styles.headerActions}>
             <div className={styles.headerIdentity}>
@@ -270,136 +327,230 @@ export const OneOnOneDashboard: React.FC<OneOnOneDashboardProps> = ({
         </header>
 
         {activeSection === "overview" ? (
-          <section className={styles.chartPanel}>
-            <div className={styles.chartPanelTop}>
-              <span className={styles.sectionLabel}>Detection insights</span>
-              <h2 className={styles.chartPanelTitle}>Percentage breakdown</h2>
-            </div>
-            <div className={styles.chartGrid}>
-              {chartCards.map((card) => (
-                <article key={card.title} className={styles.chartCard}>
-                  <div className={styles.chartValueRow}>
-                    <div className={styles.chartBadge} style={{ borderColor: card.accent }}>
-                      <span>{card.percent}%</span>
-                    </div>
-                    <p className={styles.chartCardTitle}>{card.title}</p>
-                  </div>
-                  <p className={styles.chartCardValue}>{card.value}</p>
-                  <div className={styles.chartProgress}>
-                    <span
-                      className={styles.chartProgressFill}
-                      style={{ width: `${card.percent}%`, background: card.accent }}
-                    />
-                  </div>
-                  <p className={styles.chartCardDetail}>{card.detail}</p>
-                </article>
-              ))}
-            </div>
-          </section>
-        ) 
-        : (
-          <section className={styles.promptsTableWrapper}>
-            {/* <header className={styles.promptsTableHeader}>
-              <div>
-                <span className={styles.sectionLabel}>Prompts monitoring</span>
-                <h2 className={styles.chartPanelTitle}>Active prompts</h2>
+          <section className={styles.overviewHighlight}>
+            <div className={styles.overviewHero}>
+              <div className={styles.overviewHeader}>
+                <span className={styles.sectionLabel}>Detection insights</span>
+                <h2 className={styles.chartPanelTitle}>Overview metrics</h2>
               </div>
-              <p className={styles.promptsDescription}>
-                Sort and triage every recorded prompt along with its user severity.
-              </p>
-            </header> */}
-            {/* <div className={styles.promptsTable}>
-              <div className={styles.promptsTableRowPromptsHeader}>
-                <span>User</span>
-                <span>Prompt</span>
-                <span>Severity</span>
-              </div> */}
-              {/* {promptRows.map((row) => (
-                <div key={row.id} className={styles.promptsTableRow}>
-                  <span>{row.user}</span>
-                  <span className={styles.promptText}>{row.prompt}</span>
-                  <span className={styles.severityTag}>{row.severity}</span>
-                </div>
-              ))} */}
-            {/* </div> */}
-          </section>
-        )}
-
-        <div className={styles.searchBarRow}>
-          <div className={styles.searchInput}>
-            <span className={styles.searchIcon}>{iconMap.search}</span>
-            <div className={styles.searchTag}>
-              performance
-              <button className={styles.tagDismiss} type="button" aria-label="Remove performance keyword">
-                x
-              </button>
+              <div className={styles.statGrid}>
+                {overviewStats.map((stat) => (
+                  <article key={stat.label} className={styles.statCard}>
+                    <p className={styles.statLabel}>{stat.label}</p>
+                    <p className={styles.statValue}>{stat.value}</p>
+                    <p className={styles.statChange}>{stat.change}</p>
+                  </article>
+                ))}
+              </div>
             </div>
-          </div>
-        </div>
 
-        <section className={styles.filterPanel}>
-          <div className={styles.filterHeader}>
-            <button className={styles.resetButton} type="button">
-              Reset to default
-            </button>
-          </div>
-          <div className={styles.filterGrid}>
-            {filterFields.map((field) => (
-              <label key={field.label} className={styles.filterField}>
-                {field.label}
-                <span className={styles.inputLike}>
-                  <span className={styles.inputIcon}>{iconMap[field.icon]}</span>
-                  <span>{field.placeholder}</span>
-                </span>
-              </label>
-            ))}
-          </div>
-        </section>
+            <div className={styles.chartSection}>
+              <article className={styles.pieCard}>
+                <header className={styles.pieCardHeader}>
+                  <div>
+                    <p className={styles.sectionLabel}>Severity Analysis</p>
+                    <h3>Severity distribution</h3>
+                  </div>
+                  <span className={styles.chartBadgeSmall}>Pie chart</span>
+                </header>
+                <div className={styles.pieBody}>
+                  <div
+                    className={styles.pieCircle}
+                    style={createConicGradient(severityDistribution)}
+                  />
+                  <ul className={styles.pieLegend}>
+                    {severityDistribution.map((item) => (
+                      <li key={item.label}>
+                        <span className={styles.legendSwatch} style={{ background: item.color }} />
+                        <strong>{item.value}%</strong>
+                        <span>{item.label}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </article>
 
-        <section className={styles.resultsCard}>
-          <div className={styles.resultsMeta}>
-            4 results for <strong>"performance"</strong>
-            <button className={styles.clearKeyword} type="button">
-              Clear keyword
-            </button>
-          </div>
-          <table className={styles.resultsTable}>
-              <thead>
-                <tr>
-                  <th>User</th>
-                  <th>Prompt</th>
-                  <th>Severity</th>
-                  <th>Date</th>
-                  <th aria-label="Actions" />
-                </tr>
-              </thead>
-            <tbody>
-              {results.map((row) => (
-                <tr key={row.id}>
-                  <td>
-                    <div className={styles.personCell}>
-                      <div className={`${styles.avatar} ${styles.tealAvatar}`}>
-                        {row.partner.initials}
+              <article className={styles.pieCard}>
+                <header className={styles.pieCardHeader}>
+                  <div>
+                    <p className={styles.sectionLabel}>Decision Analysis</p>
+                    <h3>Decision breakdown</h3>
+                  </div>
+                  <span className={styles.chartBadgeSmall}>Pie chart</span>
+                </header>
+                <div className={styles.pieBody}>
+                  <div
+                    className={styles.pieCircle}
+                    style={createConicGradient(decisionBreakdown)}
+                  />
+                  <ul className={styles.pieLegend}>
+                    {decisionBreakdown.map((item) => (
+                      <li key={item.label}>
+                        <span className={styles.legendSwatch} style={{ background: item.color }} />
+                        <strong>{item.value}%</strong>
+                        <span>{item.label}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </article>
+            </div>
+
+            <div className={styles.chartSectionSecondary}>
+              <article className={styles.barChartCard}>
+                <header className={styles.chartHeader}>
+                  <div>
+                    <p className={styles.sectionLabel}>Sensitive Data Insights</p>
+                    <h3>Detected sensitive types</h3>
+                  </div>
+                  <span className={styles.chartBadgeSmall}>Bar chart</span>
+                </header>
+                <div className={styles.barTracks}>
+                  {sensitivityTypes.map((type) => (
+                    <div key={type.label} className={styles.barRow}>
+                      <span>{type.label}</span>
+                      <div className={styles.barTrack}>
+                        <span style={{ width: `${type.value}%` }} />
                       </div>
-                      <div>
-                        <div className={styles.personName}>{row.partner.name}</div>
-                        <div className={styles.personRole}>{row.partner.role}</div>
-                      </div>
+                      <strong>{type.value}%</strong>
                     </div>
-                  </td>
-                  <td className={styles.contentCell}>{row.content}</td>
-                  <td className={styles.typeCell}>{row.contentType}</td>
-                  <td className={styles.dateCell}>{row.date}</td>
-                  <td className={styles.actionCell}>
-                    <Link href={`/report/${row.id}`} className={styles.viewButton}>
-                      View
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
+                  ))}
+                </div>
+              </article>
+
+              <article className={styles.lineChartCard}>
+                <header className={styles.chartHeader}>
+                  <div>
+                    <p className={styles.sectionLabel}>Sensitive Data Insights</p>
+                    <h3>Prompt volume over time</h3>
+                  </div>
+                  <span className={styles.chartBadgeSmall}>Line chart</span>
+                </header>
+                <div className={styles.lineWrapper}>
+                  {volumeTrend.map((point, idx) => (
+                    <span key={idx} style={{ height: `${point * 2}px` }} />
+                  ))}
+                </div>
+              </article>
+            </div>
+
+            <div className={styles.chartSectionSecondary}>
+              <article className={styles.areaChartCard}>
+                <header className={styles.chartHeader}>
+                  <div>
+                    <p className={styles.sectionLabel}>Operational Trends</p>
+                    <h3>Actions trend over time</h3>
+                  </div>
+                  <span className={styles.chartBadgeSmall}>Stacked area</span>
+                </header>
+                <div className={styles.areaGraph}>
+                  <span />
+                  <span />
+                  <span />
+                </div>
+              </article>
+
+              <article className={styles.providerCard}>
+                <header className={styles.chartHeader}>
+                  <div>
+                    <p className={styles.sectionLabel}>Provider comparison</p>
+                    <h3>Response coverage</h3>
+                  </div>
+                  <span className={styles.chartBadgeSmall}>Table</span>
+                </header>
+                <div className={styles.providerList}>
+                  {providerComparison.map((provider) => (
+                    <div key={provider.provider} className={styles.providerRow}>
+                      <strong>{provider.provider}</strong>
+                      <span>Blocked: {provider.blocked}</span>
+                      <span>Allowed: {provider.allowed}</span>
+                    </div>
+                  ))}
+                </div>
+          </article>
+        </div>
+      </section>
+    ) : null}
+
+    {activeSection === "prompts" && (
+          <>
+            <div className={styles.searchBarRow}>
+              <div className={styles.searchInput}>
+                <span className={styles.searchIcon}>{iconMap.search}</span>
+                <div className={styles.searchTag}>
+                  performance
+                  <button className={styles.tagDismiss} type="button" aria-label="Remove performance keyword">
+                    x
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <section className={styles.filterPanel}>
+              <div className={styles.filterHeader}>
+                <button className={styles.resetButton} type="button">
+                  Reset to default
+                </button>
+              </div>
+              <div className={styles.filterGrid}>
+                {filterFields.map((field) => (
+                  <label key={field.label} className={styles.filterField}>
+                    {field.label}
+                    <span className={styles.inputLike}>
+                      <span className={styles.inputIcon}>{iconMap[field.icon]}</span>
+                      <span>{field.placeholder}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </section>
+
+            <section className={styles.resultsCard}>
+              <div className={styles.resultsMeta}>
+                4 results for <strong>"performance"</strong>
+                <button className={styles.clearKeyword} type="button">
+                  Clear keyword
+                </button>
+              </div>
+              <table className={styles.resultsTable}>
+                <thead>
+                  <tr>
+                    <th>User</th>
+                    <th>Prompt</th>
+                    <th>Severity</th>
+                    <th>Date</th>
+                    <th aria-label="Actions" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {results.map((row) => (
+                    <tr key={row.id}>
+                      <td>
+                        <div className={styles.personCell}>
+                          <div className={`${styles.avatar} ${styles.tealAvatar}`}>
+                            {row.partner.initials}
+                          </div>
+                          <div>
+                            <div className={styles.personName}>{row.partner.name}</div>
+                            <div className={styles.personRole}>{row.partner.role}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className={styles.contentCell}>{row.content}</td>
+                      <td className={styles.typeCell}>{row.contentType}</td>
+                      <td className={styles.dateCell}>{row.date}</td>
+                      <td className={styles.actionCell}>
+                        <Link href={`/report/${row.id}`} className={styles.viewButton}>
+                          View
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          </>
+        )}
       </section>
     </div>
   );
