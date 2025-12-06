@@ -1,8 +1,10 @@
-﻿const express = require("express");
-const { sendPrompt } = require("../controllers/llmController");
+import { Router } from "express";
+import { sendToLLM } from "../controllers/llmController.js";
+import { validatePrompt } from "../middlewares/validatePrompt.js";
 
-const router = express.Router();
+const router = Router();
 
-router.post("/send", sendPrompt);
+// Forwards validated prompts to the placeholder LLM proxy layer
+router.post("/sendToLLM", validatePrompt, sendToLLM);
 
-module.exports = router;
+export default router;

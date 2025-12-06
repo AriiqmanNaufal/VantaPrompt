@@ -1,11 +1,17 @@
-﻿{
+{
   "name": "vantaprompt-backend",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "Express backend scaffold for the VantaPrompt AI DLP platform",
+  "type": "module",
+  "main": "server.js",
   "scripts": {
     "dev": "node server.js",
-    "test": "node backend/tests/backend.test.js"
+    "start": "node server.js",
+    "test": "node tests/backend.test.js"
   },
-  "dependencies": {},
-  "devDependencies": {}
+  "dependencies": {
+    "express": "^4.22.1",
+    "node.js": "^0.0.1-security"
+  }
 }

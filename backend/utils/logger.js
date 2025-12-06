@@ -1,4 +1,9 @@
-﻿exports.logEvent = (message) => {
-  // Placeholder logging utility for API gateway events
-  console.log(`[VantaPrompt] ${message}`);
+// Simple logger abstraction to keep console usage centralized for future upgrades.
+export const logEvent = (message, context = {}) => {
+  const suffix = Object.keys(context).length ? ` ${JSON.stringify(context)}` : "";
+  console.log(`[VantaPrompt] ${message}${suffix}`);
+};
+
+export default {
+  logEvent
 };
