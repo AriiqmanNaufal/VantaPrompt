@@ -1,0 +1,238 @@
+✅ VantaPrompt — Full Project Tasklist (Divided for 4 People)
+
+Roles:
+
+Person A — Backend Lead
+
+Person B — Frontend Lead
+
+Person C — AI/LLM Integration Engineer
+
+Person D — DevOps & Quality + Documentation
+
+🚀 PHASE 1 — Base Repo Setup (All contribute lightly but mainly Person D)
+Person D (Main)
+
+ Initialize vantaprompt mono-repo structure
+
+ Add README + project overview
+
+ Configure GitHub repo setup (branches, PR rules)
+
+ Set up environment templates (.env.example)
+
+ Create base scripts:
+
+ install.sh
+
+ dev.sh
+
+ build.sh
+
+Person A + B + C (Support)
+
+ Confirm folder structure meets needs
+
+ Confirm API naming conventions
+
+ Confirm JSON schemas
+
+🚀 PHASE 2 — Backend Foundation (Person A)
+Person A (Main)
+
+Core Backend Setup
+
+ Initialize Express.js / Fastify backend
+
+ Create API folders: controllers/, routes/, services/, models/
+
+ Create base middleware:
+
+ Request logging
+
+ Rate limiting
+
+ API key validation
+
+ Add /health endpoint
+
+User + Workspace
+
+ /auth/register
+
+ /auth/login
+
+ /workspace/create
+
+ /workspace/list
+
+Prompt Management
+
+ /prompt/create
+
+ /prompt/edit
+
+ /prompt/list
+
+ /prompt/test (no LLM yet—stub)
+
+Versioning System
+
+ Implement version model
+
+ Add /prompt/version/list
+
+ Add auto-versioning on edits
+
+Safety Validation API (LLM triggered later by Person C)
+
+ /prompt/validate (returns dummy response)
+
+🚀 PHASE 3 — Frontend (Person B)
+Person B (Main)
+
+Framework Setup
+
+ Setup Next.js frontend
+
+ Setup Tailwind + ShadCN UI
+
+ Configure routing structure
+
+Core Pages
+
+ Login / Register
+
+ Dashboard home
+
+ Workspace selection
+
+ Prompt editor page
+
+ Prompt editing area
+
+ Version history sidebar
+
+ “Run Test” button
+
+ “Validate Safety” button
+
+UI for LLM Validation
+
+ Display safe/unsafe results
+
+ Display suggestions from model
+
+ Highlight risky text sections
+
+Export + Project Management
+
+ Prompt collection management
+
+ Export prompt set (local download)
+
+🚀 PHASE 4 — AI/LLM Integration (Person C)
+Person C (Main)
+
+Model Switching Engine
+
+ Implement LLM switch system:
+
+ OpenAI
+
+ Claude
+
+ BytePlus (accuracy testing mode)
+
+ Add configs for:
+
+ model name
+
+ temperature
+
+ safety endpoint
+
+Safety Checking
+
+ Build safety validation prompt
+
+ Build prompt-rewriter
+
+ Build quality checker for clarity/structure
+
+ Integrate into backend /prompt/validate service
+
+Prompt Testing
+
+ Implement /prompt/test to call LLM
+
+ Return formatted output to frontend
+
+Caching + Optimization
+
+ Add Redis or simple in-memory cache for repeated checks
+
+ Validate that no sensitive data is logged or stored
+
+🚀 PHASE 5 — DevOps + QA + Deployment (Person D)
+Person D (Main)
+
+DevOps
+
+ Docker setup (backend + frontend)
+
+ CI/CD pipeline (GitHub Actions)
+
+ Auto-deploy to Vercel (frontend)
+
+ Backend deploy to Render/Fly/OCI
+
+Quality Assurance
+
+ Test all endpoints
+
+ Write API tests
+
+ Test LLM integration
+
+ Validate no sensitive prompt stored
+
+ Validate logs redact all sensitive fields
+
+Documentation
+
+ Full API documentation
+
+ Setup docs site (simple)
+
+ Write “How to use VantaPrompt”
+
+ Write “Prompt Engineering Guidelines”
+
+🚀 PHASE 6 — Final Integration (ALL)
+ALL MEMBERS
+
+ Integrate frontend ↔ backend
+
+ Integrate safety validation UI
+
+ Test real workflows
+
+ Fix bugs & polish UX
+
+🧊 Summary of Responsibilities
+👤 Person A — Backend
+
+All APIs, models, business logic
+
+👤 Person B — Frontend
+
+UI/UX, pages, interactive editor
+
+👤 Person C — LLM Engineer
+
+LLM switching, safety validation, testing model
+
+👤 Person D — DevOps + Docs
+
+Repo, CI/CD, deployment, documentation
