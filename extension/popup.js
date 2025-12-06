@@ -120,4 +120,3 @@ function hideDetectedNumbers() {
   detectionAlert.classList.remove('show');
   detectedNumbers.innerHTML = '';
 }
-

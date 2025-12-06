@@ -24,4 +24,3 @@ export async function logWarning(req, res) {
     res.status(500).json({ success: false, message: "Unable to log warning" });
   }
 }
-

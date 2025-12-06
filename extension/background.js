@@ -200,4 +200,3 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 chrome.tabs.onRemoved.addListener((tabId) => {
   monitoredPrompts.delete(tabId);
 });
-

@@ -16,4 +16,3 @@ const warningLogSchema = new mongoose.Schema(
 );
 
 export default mongoose.models.WarningLog || mongoose.model("WarningLog", warningLogSchema);
-
