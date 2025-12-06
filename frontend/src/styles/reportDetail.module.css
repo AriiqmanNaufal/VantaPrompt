@@ -99,6 +99,26 @@
   color: #1c1333;
 }
 
+.sessionLayout {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  padding: 12px 0;
+}
+
+.sessionLayout dt {
+  color: #5c5079;
+  font-size: 12px;
+  letter-spacing: 0.35em;
+  text-transform: uppercase;
+  margin-bottom: 0;
+}
+
+.sessionLayout dd {
+  color: #18112b;
+  font-size: 16px;
+  font-weight: 600;
+}
+
 .toggleGroup {
   display: inline-flex;
   border-radius: 999px;

@@ -1,7 +1,9 @@
-import React from "react";
+import React, { useCallback, useRef } from "react";
 import Link from "next/link";
 import styles from "./OneOnOneDashboard.module.css";
 import { detectionEvent } from "../data/reportData";
+import { jsPDF } from "jspdf";
+import html2canvas from "html2canvas";
 
 type NavItem = {
   label: string;
@@ -259,6 +261,17 @@ interface OneOnOneDashboardProps {
 export const OneOnOneDashboard: React.FC<OneOnOneDashboardProps> = ({
   activeSection = "overview",
 }) => {
+  const overviewRef = useRef<HTMLDivElement | null>(null);
+  const exportOverview = useCallback(async () => {
+    if (!overviewRef.current) return;
+    const canvas = await html2canvas(overviewRef.current, { scale: 2, backgroundColor: "#ffffff" });
+    const imgData = canvas.toDataURL("image/png");
+    const doc = new jsPDF("p", "mm", "a4");
+    const pdfWidth = doc.internal.pageSize.getWidth();
+    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+    doc.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+    doc.save("overview.pdf");
+  }, []);
   return (
     <div className={styles.dashboard}>
       <aside className={styles.sidebar}>
@@ -327,7 +340,7 @@ export const OneOnOneDashboard: React.FC<OneOnOneDashboardProps> = ({
         </header>
 
         {activeSection === "overview" ? (
-          <section className={styles.overviewHighlight}>
+          <section ref={overviewRef} className={styles.overviewHighlight}>
             <div className={styles.overviewHero}>
               <div className={styles.overviewHeader}>
                 <span className={styles.sectionLabel}>Detection insights</span>
@@ -341,6 +354,11 @@ export const OneOnOneDashboard: React.FC<OneOnOneDashboardProps> = ({
                     <p className={styles.statChange}>{stat.change}</p>
                   </article>
                 ))}
+              </div>
+              <div className={styles.overviewExportRow}>
+                <button className={styles.overviewExportBtn} onClick={exportOverview}>
+                  Export / download
+                </button>
               </div>
             </div>
 

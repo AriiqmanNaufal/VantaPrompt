@@ -1,22 +1,40 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import dashboardStyles from "../../components/OneOnOneDashboard.module.css";
 import reportStyles from "../../styles/reportDetail.module.css";
 import { navItems, BellIcon, GridIcon, SettingsIcon } from "../../components/OneOnOneDashboard";
 import { detectionEvent, detectionMetadata } from "../../data/reportData";
+import { jsPDF } from "jspdf";
+import html2canvas from "html2canvas";
 
-const actionButtons = ["Mark as reviewed", "False positive", "Export / download"];
+const actionButtons = ["Export / download"];
+const capitalize = (value: string) => {
+  if (!value) return value;
+  return value.charAt(0).toUpperCase() + value.slice(1);
+};
 
 const ReportDetailPage: React.FC = () => {
   const { query } = useRouter();
   const [showRaw, setShowRaw] = useState(false);
+  const reportRef = useRef<HTMLDivElement | null>(null);
+
+  const exportReport = useCallback(async () => {
+    if (!reportRef.current) return;
+    const canvas = await html2canvas(reportRef.current, { scale: 2, backgroundColor: "#ffffff" });
+    const imgData = canvas.toDataURL("image/png");
+    const doc = new jsPDF("p", "mm", "a4");
+    const pdfWidth = doc.internal.pageSize.getWidth();
+    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+    doc.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+    doc.save(`report-${query.id || detectionEvent._id}.pdf`);
+  }, [query.id]);
 
   const infoCards = useMemo(
     () => [
-      { label: "Severity", value: detectionEvent.severity },
+      { label: "Severity", value: capitalize(detectionEvent.severity) },
       { label: "Allowed", value: detectionEvent.allowed ? "Yes" : "No" },
-      { label: "Action taken", value: detectionEvent.actionTaken },
+      { label: "Action taken", value: capitalize(detectionEvent.actionTaken) },
       { label: "Timestamp", value: new Date(detectionEvent.timestamp).toLocaleString() },
     ],
     []
@@ -53,12 +71,12 @@ const ReportDetailPage: React.FC = () => {
           <div className={dashboardStyles.titleBlock}>
             <h1 className={dashboardStyles.pageTitle}>Report detail</h1>
             <div className={dashboardStyles.subNav}>
-              <button type="button" className={`${dashboardStyles.subNavButton} ${dashboardStyles.subNavButtonActive}`}>
+              {/* <button type="button" className={`${dashboardStyles.subNavButton} ${dashboardStyles.subNavButtonActive}`}>
                 My 1-on-1s
               </button>
               <button type="button" className={dashboardStyles.subNavButton}>
                 Search
-              </button>
+              </button> */}
             </div>
           </div>
           <div className={dashboardStyles.headerActions}>
@@ -84,7 +102,7 @@ const ReportDetailPage: React.FC = () => {
           </Link>
         </div>
 
-        <div className={reportStyles.reportShell}>
+        <div ref={reportRef} className={reportStyles.reportShell}>
           <div className={reportStyles.topCards}>
             {infoCards.map((card) => (
               <article key={card.label} className={reportStyles.topCard}>
@@ -101,7 +119,7 @@ const ReportDetailPage: React.FC = () => {
                 <h2>Session info</h2>
                 <span className={reportStyles.sectionMeta}>Workstation, browser, and IP</span>
               </div>
-              <dl className={reportStyles.definitionList}>
+              <dl className={`${reportStyles.definitionList} ${reportStyles.sessionLayout}`}>
                 {detectionMetadata.map((item) => (
                   <React.Fragment key={item.label}>
                     <dt>{item.label}</dt>
@@ -190,14 +208,19 @@ const ReportDetailPage: React.FC = () => {
             </section>
           </div>
 
-          <div className={reportStyles.actionRow}>
+          {/* <div className={reportStyles.actionRow}>
             {actionButtons.map((action) => (
-              <button key={action} type="button" className={reportStyles.actionButton}>
+              <button
+                key={action}
+                type="button"
+                className={reportStyles.actionButton}
+                onClick={exportReport}
+              >
                 {action}
               </button>
             ))}
             <div className={reportStyles.idBadge}>Report {query.id}</div>
-          </div>
+          </div> */}
         </div>
       </section>
     </div>
