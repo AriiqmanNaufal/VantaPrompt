@@ -3,12 +3,14 @@ import mongoose from "mongoose";
 import { checkPrompt } from "../controllers/dlpController.js";
 import { validatePrompt } from "../middlewares/validatePrompt.js";
 import { logWarning } from "../controllers/warningController.js";
+import { listRegexes } from "../controllers/regexController.js";
 
 const router = Router();
 
 // Accepts prompts and routes them through validation + controller stub
 router.post("/checkPrompt", validatePrompt, checkPrompt);
 router.post("/logWarning", logWarning);
+router.get("/regexes", listRegexes);
 
 router.get("/db-status", (_req, res) => {
   const ready = mongoose.connection.readyState;

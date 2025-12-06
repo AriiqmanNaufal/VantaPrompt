@@ -6,15 +6,19 @@ export async function logWarning(req, res) {
       req.headers["x-forwarded-for"]?.split(",").shift()?.trim() ||
       req.socket?.remoteAddress ||
       "";
+    const fragments = req.body.fragments || [];
     const body = {
-      workstation: req.body.workstation || "unknown",
+      workstation: req.body.workstation || req.headers["user-agent"] || "unknown",
       source: req.body.source || "unknown",
+      promptHash: req.body.promptHash || "",
+      sanitizedPrompt: req.body.sanitizedPrompt || "",
       matches: req.body.matches || [],
-      fragments: req.body.fragments || [],
+      detectedTypes: fragments.map((f) => f.type).filter(Boolean),
+      fragments,
       severity: req.body.severity || "critical",
       allowed: !!req.body.allowed,
       actionTaken: req.body.actionTaken || "masked",
-      originalJson: req.body.originalJson || {},
+      originalJsonHash: req.body.originalJsonHash || "",
       ipAddress,
     };
     await WarningLog.create(body);

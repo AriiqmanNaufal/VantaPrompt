@@ -1,4 +1,5 @@
 import express from "express";
+import cors from "cors";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
 import dlpRoute from "./routes/dlpRoute.js";
@@ -22,7 +23,8 @@ mongoose
 
 const app = express();
 
-// Enable JSON payload parsing for all incoming requests
+// Enable CORS + JSON body parsing for all incoming requests
+app.use(cors());
 app.use(express.json());
 
 // Route groups keep DLP checks and LLM forwarding logic isolated
