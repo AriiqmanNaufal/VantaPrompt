@@ -11,8 +11,22 @@
     <h1>VantaPrompt Extension</h1>
     <div class="content">
       <p>Welcome to your Chrome extension!</p>
+      <div id="promptMonitor" class="prompt-monitor" style="display: none;">
+        <h3>Monitored Prompt</h3>
+        <div id="promptContent" class="prompt-content"></div>
+        <div id="promptInfo" class="prompt-info"></div>
+        <div id="detectionAlert" class="detection-alert" style="display: none;">
+          <div class="alert-header">
+            <span class="alert-icon">⚠️</span>
+            <strong>12-Digit Number Detected</strong>
+          </div>
+          <div id="detectedNumbers" class="detected-numbers"></div>
+        </div>
+      </div>
       <button id="actionBtn" class="btn">Click Me</button>
       <div id="status" class="status"></div>
+      <button id="dbStatusBtn" class="btn secondary">Check DB connection</button>
+      <div id="dbStatus" class="db-status"></div>
     </div>
   </div>
   <script src="config.js"></script>

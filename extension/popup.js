@@ -1,8 +1,14 @@
 // Popup script
-const popupConfig = window.VANTAPROMPT_CONFIG || {};
-
-document.addEventListener("DOMContentLoaded", () => {
-  const actionBtn = document.getElementById("actionBtn");
+document.addEventListener('DOMContentLoaded', () => {
+  const actionBtn = document.getElementById('actionBtn');
+  const status = document.getElementById('status');
+  const promptMonitor = document.getElementById('promptMonitor');
+  const promptContent = document.getElementById('promptContent');
+  const promptInfo = document.getElementById('promptInfo');
+  const dbStatusBtn = document.getElementById('dbStatusBtn');
+  const dbStatus = document.getElementById('dbStatus');
+  const detectionAlert = document.getElementById('detectionAlert');
+  const detectedNumbers = document.getElementById('detectedNumbers');
 
   chrome.storage.local.get(["clickCount"], (result) => {
     const count = result.clickCount || 0;
@@ -10,6 +16,9 @@ document.addEventListener("DOMContentLoaded", () => {
       updateStatus(`Button clicked ${count} times`);
     }
   });
+
+  // Load monitored prompt
+  loadMonitoredPrompt();
 
   actionBtn.addEventListener("click", () => {
     chrome.storage.local.get(["clickCount"], (result) => {
@@ -42,10 +51,6 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     );
   });
-
-  if (popupConfig.apiBaseUrl) {
-    updateStatus(`Connected to ${popupConfig.apiBaseUrl}`, false);
-  }
 });
 
 function updateStatus(message, isError = false) {
@@ -57,5 +62,31 @@ function updateStatus(message, isError = false) {
   } else {
     status.classList.remove("error");
   }
+}
+
+// Display detected 12-digit numbers
+function displayDetectedNumbers(numbers) {
+  if (!numbers || numbers.length === 0) {
+    hideDetectedNumbers();
+    return;
+  }
+  
+  detectedNumbers.innerHTML = '';
+  numbers.forEach((number, index) => {
+    const numberItem = document.createElement('div');
+    numberItem.className = 'number-item';
+    numberItem.textContent = `${index + 1}. ${number}`;
+    detectedNumbers.appendChild(numberItem);
+  });
+  
+  detectionAlert.style.display = 'block';
+  detectionAlert.classList.add('show');
+}
+
+// Hide detected numbers alert
+function hideDetectedNumbers() {
+  detectionAlert.style.display = 'none';
+  detectionAlert.classList.remove('show');
+  detectedNumbers.innerHTML = '';
 }
 
