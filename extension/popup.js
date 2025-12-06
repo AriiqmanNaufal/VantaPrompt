@@ -2,6 +2,11 @@
 document.addEventListener('DOMContentLoaded', () => {
   const actionBtn = document.getElementById('actionBtn');
   const status = document.getElementById('status');
+  const promptMonitor = document.getElementById('promptMonitor');
+  const promptContent = document.getElementById('promptContent');
+  const promptInfo = document.getElementById('promptInfo');
+  const detectionAlert = document.getElementById('detectionAlert');
+  const detectedNumbers = document.getElementById('detectedNumbers');
 
   // Load saved state
   chrome.storage.local.get(['clickCount'], (result) => {
@@ -10,6 +15,9 @@ document.addEventListener('DOMContentLoaded', () => {
       updateStatus(`Button clicked ${count} times`);
     }
   });
+
+  // Load monitored prompt
+  loadMonitoredPrompt();
 
   // Button click handler
   actionBtn.addEventListener('click', () => {
@@ -30,9 +38,73 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
+// Load the monitored prompt from background script
+function loadMonitoredPrompt() {
+  // Get current active tab
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (tabs[0] && tabs[0].id) {
+      chrome.runtime.sendMessage({ 
+        action: 'getMonitoredPrompt',
+        tabId: tabs[0].id
+      }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.error('Error getting prompt:', chrome.runtime.lastError);
+          return;
+        }
+
+        if (response && response.success && response.prompt) {
+          // Display the prompt
+          promptContent.textContent = response.prompt;
+          const length = response.promptLength || response.prompt.length;
+          const timestamp = response.timestamp ? new Date(response.timestamp).toLocaleTimeString() : 'Just now';
+          promptInfo.textContent = `${length} characters • ${timestamp}`;
+          
+          // Display 12-digit number detection
+          if (response.has12DigitNumber && response.detectedNumbers && response.detectedNumbers.length > 0) {
+            displayDetectedNumbers(response.detectedNumbers);
+          } else {
+            hideDetectedNumbers();
+          }
+          
+          promptMonitor.style.display = 'block';
+        } else {
+          promptMonitor.style.display = 'none';
+          hideDetectedNumbers();
+        }
+      });
+    }
+  });
+}
+
 function updateStatus(message) {
   const status = document.getElementById('status');
   status.textContent = message;
   status.classList.add('show');
+}
+
+// Display detected 12-digit numbers
+function displayDetectedNumbers(numbers) {
+  if (!numbers || numbers.length === 0) {
+    hideDetectedNumbers();
+    return;
+  }
+  
+  detectedNumbers.innerHTML = '';
+  numbers.forEach((number, index) => {
+    const numberItem = document.createElement('div');
+    numberItem.className = 'number-item';
+    numberItem.textContent = `${index + 1}. ${number}`;
+    detectedNumbers.appendChild(numberItem);
+  });
+  
+  detectionAlert.style.display = 'block';
+  detectionAlert.classList.add('show');
+}
+
+// Hide detected numbers alert
+function hideDetectedNumbers() {
+  detectionAlert.style.display = 'none';
+  detectionAlert.classList.remove('show');
+  detectedNumbers.innerHTML = '';
 }
 
