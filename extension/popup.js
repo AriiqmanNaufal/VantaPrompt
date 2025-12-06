@@ -9,6 +9,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const dbStatus = document.getElementById('dbStatus');
   const detectionAlert = document.getElementById('detectionAlert');
   const detectedNumbers = document.getElementById('detectedNumbers');
+  const closeBtn = document.getElementById('closeBtn');
+  const container = document.querySelector('.container');
 
   // Load saved state
   chrome.storage.local.get(['clickCount'], (result) => {
@@ -20,6 +22,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Load monitored prompt
   loadMonitoredPrompt();
+
+  closeBtn?.addEventListener('click', () => window.close());
+  document.body.addEventListener('click', (event) => {
+    if (!event.target.closest('.container')) {
+      window.close();
+    }
+  });
 
   // Button click handler
   actionBtn.addEventListener('click', () => {

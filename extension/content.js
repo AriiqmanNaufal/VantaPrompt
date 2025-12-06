@@ -122,6 +122,8 @@ const DEFAULT_REGEX_CONFIG = [
     flags: "g",
     severity: "critical",
     description: "Malaysia IC without dashes",
+    contextKeywords: ["IC", "NRIC", "MyKad", "identification", "ID", "no ic", "kad pengenalan"],
+    priority: 1,
   },
   {
     type: "PASSPORT",
@@ -129,6 +131,8 @@ const DEFAULT_REGEX_CONFIG = [
     flags: "gi",
     severity: "high",
     description: "Generic passport numbers",
+    contextKeywords: ["passport", "passport no", "passport number", "passport ID", "passport holder"],
+    priority: 1,
   },
   {
     type: "VIRTUAL_ACCOUNT",
@@ -136,6 +140,8 @@ const DEFAULT_REGEX_CONFIG = [
     flags: "g",
     severity: "critical",
     description: "Virtual Account Numbers for FPX / DuitNow VA",
+    contextKeywords: ["VA", "virtual account", "duitnow", "FPX va", "e-banking", "bank transfer"],
+    priority: 2,
   },
   {
     type: "EWALLET_ACCOUNT",
@@ -143,6 +149,8 @@ const DEFAULT_REGEX_CONFIG = [
     flags: "g",
     severity: "critical",
     description: "General e-wallet account identifiers",
+    contextKeywords: ["ewallet", "wallet id", "touch n go", "boost", "grabpay", "duitnow id"],
+    priority: 2,
   },
   {
     type: "SWIFT_BIC",
@@ -150,6 +158,8 @@ const DEFAULT_REGEX_CONFIG = [
     flags: "gi",
     severity: "medium",
     description: "SWIFT/BIC financial institution codes",
+    contextKeywords: ["SWIFT", "BIC", "bank code", "international transfer"],
+    priority: 2,
   },
   {
     type: "IBAN",
@@ -157,6 +167,8 @@ const DEFAULT_REGEX_CONFIG = [
     flags: "gi",
     severity: "high",
     description: "International Bank Account Numbers",
+    contextKeywords: ["IBAN", "international account", "SEPA", "EU transfer"],
+    priority: 2,
   },
 ];
 let runtimeRegexDefinitions = buildRegexDefinitions(DEFAULT_REGEX_CONFIG);
@@ -181,7 +193,9 @@ function buildRegexDefinitions(list = []) {
         pattern: entry.pattern,
         flags: entry.flags || "g",
         severity: (entry.severity || "critical").toLowerCase(),
-        description: entry.description || ""
+        description: entry.description || "",
+        contextKeywords: Array.isArray(entry.contextKeywords) ? entry.contextKeywords : [],
+        priority: typeof entry.priority === "number" ? entry.priority : Number(entry.priority) || 0,
       };
     })
     .filter(Boolean);
@@ -286,6 +300,32 @@ function highestSeverityString(fragments = []) {
   }, fragments[0].severity || "critical");
 }
 
+function sortFragmentsByPriority(fragments = []) {
+  return [...fragments].sort((a, b) => {
+    const toPriority = (entry) => {
+      if (entry == null) return null;
+      const parsed = Number(entry.priority);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+    };
+
+    const priorityA = toPriority(a);
+    const priorityB = toPriority(b);
+
+    if (priorityA !== null && priorityB !== null) {
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB;
+      }
+    } else if (priorityA !== null && priorityB === null) {
+      // compare with severity when other fragment has no priority
+      return severityLevel(b.severity) - severityLevel(a.severity);
+    } else if (priorityA === null && priorityB !== null) {
+      return severityLevel(b.severity) - severityLevel(a.severity);
+    }
+
+    return severityLevel(b.severity) - severityLevel(a.severity);
+  });
+}
+
 ensureRegexDefinitionsLoaded();
 
 function detect12DigitNumber(text = "") {
@@ -307,6 +347,7 @@ function detectSensitiveFragments(text = "") {
         type: def.type,
         fragment: match[0],
         severity: def.severity || "critical",
+        priority: typeof def.priority === "number" ? def.priority : Number(def.priority) || 9999,
       });
       if (match.index === regex.lastIndex) {
         regex.lastIndex++;
@@ -344,7 +385,7 @@ function has12DigitNumber(text = "") {
   return detect12DigitNumber(text).length > 0;
 }
 
-function maskSensitiveData(text = "") {
+function maskSensitiveData(text = "", forcedType = null) {
   if (!text) return "";
   let masked = text;
   const fragments = detectSensitiveFragments(text);
@@ -352,10 +393,24 @@ function maskSensitiveData(text = "") {
     if (!fragment) {
       return;
     }
-    const placeholder = `[${type || "SENSITIVE"}]`;
+    const placeholderType = forcedType || type || "SENSITIVE";
+    const placeholder = `[${placeholderType}]`;
     masked = masked.split(fragment).join(placeholder);
   });
   return masked;
+}
+
+function replacePromptWithSanitizedText(maskedPrompt) {
+  if (!promptMonitor || !maskedPrompt) {
+    return;
+  }
+
+  if (promptMonitor.tagName === "TEXTAREA" || promptMonitor.tagName === "INPUT") {
+    promptMonitor.value = maskedPrompt;
+  } else if (promptMonitor.contentEditable === "true") {
+    promptMonitor.textContent = maskedPrompt;
+  }
+  lastPromptValue = maskedPrompt;
 }
 
 async function hashFragment(value = "") {
@@ -406,6 +461,7 @@ async function triggerSensitiveAlert() {
     ? `Detected: ${pendingSensitiveDetails.detectedTypes.join(", ")} • Severity: ${pendingSensitiveDetails.severity}`
     : `Severity: ${pendingSensitiveDetails.severity}`;
   showSensitiveToast(pendingSensitiveDetails.maskedPrompt, summary);
+  replacePromptWithSanitizedText(pendingSensitiveDetails.maskedPrompt);
   const hashedFragments = await hashFragments(pendingSensitiveDetails.fragments);
   console.warn("VantaPrompt: ⚠️ Sensitive data detected:", hashedFragments);
   sendSensitiveWarning({
@@ -1223,16 +1279,17 @@ function handlePromptChange(event) {
       // Detect 12-digit numbers in the prompt
       const detectedNumbers = detect12DigitNumber(currentValue);
       const sensitiveFragments = detectSensitiveFragments(currentValue);
-      const severity = highestSeverityString(sensitiveFragments);
+      const prioritizedFragments = sortFragmentsByPriority(sensitiveFragments);
+      const severity = prioritizedFragments[0]?.severity || "critical";
       const detectedTypes = [
-        ...new Set(sensitiveFragments.map((fragment) => fragment.type)),
+        ...new Set(prioritizedFragments.map((fragment) => fragment.type)),
       ];
       const uniqueMatches = [...new Set([...detectedNumbers, ...sensitiveFragments.map((f) => f.fragment)])];
-      const maskedPrompt = maskSensitiveData(currentValue);
+      const highestType = prioritizedFragments[0]?.type || null;
+      const maskedPrompt = maskSensitiveData(currentValue, highestType);
       if (sensitiveFragments.length > 0) {
-        const signature = sensitiveFragments
+        const signature = prioritizedFragments
           .map((fragment) => `${fragment.type}:${fragment.fragment}`)
-          .sort()
           .join("|");
         pendingSensitiveDetails = {
           fragments: sensitiveFragments,

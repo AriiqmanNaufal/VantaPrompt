@@ -7,6 +7,8 @@ const regexPatternSchema = new mongoose.Schema(
     flags: { type: String, default: "g" },
     severity: { type: String, default: "critical" },
     description: { type: String },
+    contextKeywords: [{ type: String }],
+    priority: { type: Number, default: 0 },
   },
   { timestamps: false }
 );
