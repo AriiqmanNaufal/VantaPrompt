@@ -11,6 +11,7 @@ const warningLogSchema = new mongoose.Schema(
     severity: { type: String },
     allowed: { type: Boolean, default: false },
     actionTaken: { type: String, default: "masked" },
+    matches: [{ type: String }],
     detectedTypes: [{ type: String }],
     fragments: [{ type: mongoose.Schema.Types.Mixed }],
     ipAddress: { type: String },

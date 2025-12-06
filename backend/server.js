@@ -5,6 +5,7 @@ import mongoose from "mongoose";
 import dlpRoute from "./routes/dlpRoute.js";
 import llmRoute from "./routes/llmRoute.js";
 import dashboardRoute from "./routes/dashboardRoute.js";
+import authRoute from "./routes/authRoute.js";
 import { connectDatabase } from "./config/database.js";
 import { env } from "./config/env.js";
 import { logEvent } from "./utils/logger.js";
@@ -34,15 +35,22 @@ app.use(express.json());
 // Route groups keep DLP checks and LLM forwarding logic isolated
 app.use("/dlp", dlpRoute);
 app.use("/llm", llmRoute);
+app.use("/dashboard", dashboardRoute);
+app.use("/auth", authRoute);
 
 // Minimal health endpoint for ops checks
 app.get("/health", (_req, res) => {
   res.json({ service: "VantaPrompt backend", status: "ok" });
 });
 
-app.use("/dlp", dlpRoute);
-app.use("/llm", llmRoute);
-app.use("/dashboard", dashboardRoute);
+// Friendly root response so hitting localhost:5000 shows something useful
+app.get("/", (_req, res) => {
+  res.json({
+    service: "VantaPrompt backend",
+    endpoints: ["/health", "/dlp", "/llm", "/dashboard"],
+    status: "ok"
+  });
+});
 
 app.use(notFoundHandler);
 app.use(errorHandler);

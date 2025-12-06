@@ -136,6 +136,26 @@
   gap: 24px;
 }
 
+.statusRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.loadingText {
+  font-size: 14px;
+  color: #6c628c;
+}
+
+.statusBanner {
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+  color: #7f1d1d;
+  padding: 8px 18px;
+  border-radius: 999px;
+  font-weight: 600;
+}
+
 .header {
   display: flex;
   justify-content: space-between;
@@ -901,6 +921,34 @@
   font-weight: 600;
 }
 
+.decisionCell {
+  min-width: 150px;
+}
+
+.decisionWrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.decisionBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  background: #1f163b;
+  color: #ffffff;
+  letter-spacing: 0.05em;
+}
+
+.decisionMeta {
+  font-size: 12px;
+  color: #6c628c;
+}
+
 .authorAvatar {
   width: 32px;
   height: 32px;
@@ -933,6 +981,14 @@
 
 .viewButton:hover {
   background: #f8f6ff;
+}
+
+.emptyState {
+  width: 100%;
+  text-align: center;
+  color: #8a83a7;
+  font-weight: 500;
+  padding: 12px;
 }
 
 @media (max-width: 1024px) {

@@ -8,6 +8,22 @@
   gap: 24px;
 }
 
+.loadingState {
+  font-size: 14px;
+  color: #5c5079;
+  margin-bottom: 12px;
+}
+
+.errorBanner {
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+  color: #7f1d1d;
+  padding: 10px 18px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  font-weight: 600;
+}
+
 .topCards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -83,6 +99,16 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 12px;
+}
+
+.definitionItem {
+  background: #fff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 14px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .definitionList dt {
@@ -202,6 +228,31 @@
   font-size: 14px;
   color: #1f163b;
   font-weight: 500;
+}
+
+.safeAlternative {
+  margin-top: 16px;
+  border: 1px dashed rgba(15, 23, 42, 0.2);
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.safeAltLabel {
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #6b5b9c;
+}
+
+.safeAltText {
+  margin: 0;
+  font-size: 14px;
+  color: #1f163b;
+  font-weight: 600;
 }
 
 .hashList {

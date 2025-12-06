@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { DlpEvent } from "../models/DlpEvent.js";
 import WarningLog from "../models/WarningLog.js";
 import { analyzePrompt } from "../utils/promptAnalyzer.js";
+import { loadRegexDefinitions } from "../services/regexDefinitionService.js";
 
 const severityActionMap = {
   low: { allowed: true, actionTaken: "allowed" },
@@ -23,7 +24,11 @@ export const checkPrompt = async (req, res, next) => {
     const modelUsed = req.body?.modelUsed;
     const latencyMs = Number(req.body?.latencyMs);
 
-    const { redactedText, detectedTypes, findings, highestSeverity } = analyzePrompt(prompt);
+    const regexDefinitions = await loadRegexDefinitions();
+    const { redactedText, detectedTypes, findings, highestSeverity, fragments } = analyzePrompt(
+      prompt,
+      regexDefinitions
+    );
     const decision = severityActionMap[highestSeverity] || severityActionMap.low;
 
     const eventPayload = {
@@ -44,28 +49,38 @@ export const checkPrompt = async (req, res, next) => {
 
     const createdEvent = await DlpEvent.create(eventPayload);
 
+    const ipAddress =
+      req.headers["x-forwarded-for"]?.split(",").shift()?.trim() ||
+      req.socket?.remoteAddress ||
+      "";
+
+    const maskedFragments = fragments.map((fragment) => ({
+      type: fragment.type,
+      severity: fragment.severity || highestSeverity,
+      fragmentHash: fragment.fragmentHash,
+    }));
+
+    const originalJson = {
+      redactedText,
+      detectedTypes,
+      findings
+    };
+
     await WarningLog.create({
       workspaceId,
       userId,
       workstation: req.headers["user-agent"],
       source,
+      promptHash: eventPayload.originalHash,
       matches: detectedTypes,
       detectedTypes,
-      fragments: findings.map((finding) => ({
-        type: finding.type,
-        fragment: `[HASH:${finding.fragmentHash?.slice(0, 6) || "XXX"}]`,
-        severity: highestSeverity
-      })),
+      fragments: maskedFragments,
       severity: highestSeverity,
-      normalizedSeverity: highestSeverity,
       allowed: decision.allowed,
       actionTaken: decision.actionTaken,
-      originalJson: {
-        redactedText,
-        detectedTypes,
-        findings
-      },
-      timestamp: eventPayload.timestamp
+      sanitizedPrompt: redactedText,
+      originalJsonHash: hashPrompt(JSON.stringify(originalJson)),
+      ipAddress
     });
 
     return res.json({

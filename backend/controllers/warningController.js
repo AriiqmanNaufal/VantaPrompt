@@ -1,4 +1,6 @@
 import WarningLog from "../models/WarningLog.js";
+import LlmResult from "../models/LlmResult.js";
+import { evaluateLayerTwoRisk } from "../services/layerTwoEvaluator.js";
 
 const normalizeSeverity = (value) => {
   if (value === null || value === undefined) {
@@ -27,7 +29,7 @@ const sanitizeFragments = (fragments) => {
       severity: fragment?.severity || fragment?.level || null,
       fragmentHash: fragment?.fragmentHash
     }))
-    .filter((fragment) => fragment.fragment);
+    .filter((fragment) => fragment.fragmentHash || fragment.fragment);
 };
 
 const dedupeStrings = (values) => {
@@ -49,29 +51,67 @@ export async function logWarning(req, res) {
       req.headers["x-forwarded-for"]?.split(",").shift()?.trim() ||
       req.socket?.remoteAddress ||
       "";
-    const fragments = req.body.fragments || [];
-    const body = {
+
+    const fragments = sanitizeFragments(req.body.fragments);
+    const detectedTypesFromFragments = fragments.map((fragment) => fragment.type).filter(Boolean);
+    const matches = dedupeStrings(req.body.matches);
+    const detectedTypes = dedupeStrings(
+      (req.body.detectedTypes || []).concat(detectedTypesFromFragments)
+    );
+    const normalizedSeverity = normalizeSeverity(req.body.severity);
+
+    const warning = {
+      workspaceId: req.body.workspaceId || "",
+      userId: req.body.userId || "",
       workstation: req.body.workstation || req.headers["user-agent"] || "unknown",
       source: req.body.source || "unknown",
       promptHash: req.body.promptHash || "",
       sanitizedPrompt: req.body.sanitizedPrompt || "",
-      matches: req.body.matches || [],
-      detectedTypes: fragments.map((f) => f.type).filter(Boolean),
-      fragments,
-      severity: req.body.severity || "critical",
-      allowed: !!req.body.allowed,
+      severity: normalizedSeverity,
+      allowed: Boolean(req.body.allowed),
       actionTaken: req.body.actionTaken || "masked",
-      originalJsonHash: req.body.originalJsonHash || "",
+      detectedTypes,
+      fragments,
       ipAddress,
-      timestamp
+      originalJsonHash: req.body.originalJsonHash || "",
+      matches
     };
 
     const created = await WarningLog.create(warning);
+    let layerTwoDecision = null;
+    try {
+      layerTwoDecision = await evaluateLayerTwoRisk({
+        sanitizedPrompt: warning.sanitizedPrompt,
+        severity: normalizedSeverity,
+        detectedTypes
+      });
+
+      if (layerTwoDecision) {
+        await LlmResult.findOneAndUpdate(
+          { warningLogId: created._id },
+          {
+            warningLogId: created._id,
+            ...layerTwoDecision,
+            severity: normalizedSeverity,
+            sanitizedPrompt: warning.sanitizedPrompt,
+            detectedTypes,
+            metadata: {
+              actionTaken: warning.actionTaken,
+              source: warning.source,
+              provider: layerTwoDecision.provider || "unknown"
+            }
+          },
+          { upsert: true, new: true, setDefaultsOnInsert: true }
+        );
+      }
+    } catch (evalError) {
+      console.error("VantaPrompt: Unable to persist Layer 2 result", evalError);
+    }
 
     res.status(201).json({
       success: true,
       id: created._id,
-      normalizedSeverity: created.normalizedSeverity
+      layerTwoDecision
     });
   } catch (error) {
     console.error("VantaPrompt: Unable to log warning", error);

@@ -174,9 +174,14 @@ const DEFAULT_REGEX_CONFIG = [
 let runtimeRegexDefinitions = buildRegexDefinitions(DEFAULT_REGEX_CONFIG);
 let regexLoadPromise = null;
 const SENSITIVE_PAUSE_MS = 1500;
+const TOAST_DISPLAY_DELAY_MS = 2000;
 let sensitiveAlertTimer = null;
+let toastDelayTimer = null;
 let pendingSensitiveDetails = null;
 let lastAlertSignature = "";
+let autoReplaceAppliedForCurrentPrompt = false;
+let sensitiveAlertHandledForCurrentPrompt = false;
+let redFlagSubmittedForCurrentPrompt = false;
 
 function buildRegexDefinitions(list = []) {
   if (!Array.isArray(list)) {
@@ -404,6 +409,9 @@ function replacePromptWithSanitizedText(maskedPrompt) {
   if (!promptMonitor || !maskedPrompt) {
     return;
   }
+  if (autoReplaceAppliedForCurrentPrompt) {
+    return;
+  }
 
   if (promptMonitor.tagName === "TEXTAREA" || promptMonitor.tagName === "INPUT") {
     promptMonitor.value = maskedPrompt;
@@ -411,6 +419,13 @@ function replacePromptWithSanitizedText(maskedPrompt) {
     promptMonitor.textContent = maskedPrompt;
   }
   lastPromptValue = maskedPrompt;
+  autoReplaceAppliedForCurrentPrompt = true;
+}
+
+function resetAutoReplaceState() {
+  autoReplaceAppliedForCurrentPrompt = false;
+  sensitiveAlertHandledForCurrentPrompt = false;
+  redFlagSubmittedForCurrentPrompt = false;
 }
 
 async function hashFragment(value = "") {
@@ -457,23 +472,41 @@ async function triggerSensitiveAlert() {
     return;
   }
   lastAlertSignature = signature;
-  const summary = pendingSensitiveDetails.detectedTypes.length
-    ? `Detected: ${pendingSensitiveDetails.detectedTypes.join(", ")} • Severity: ${pendingSensitiveDetails.severity}`
-    : `Severity: ${pendingSensitiveDetails.severity}`;
-  showSensitiveToast(pendingSensitiveDetails.maskedPrompt, summary);
-  replacePromptWithSanitizedText(pendingSensitiveDetails.maskedPrompt);
-  const hashedFragments = await hashFragments(pendingSensitiveDetails.fragments);
-  console.warn("VantaPrompt: ⚠️ Sensitive data detected:", hashedFragments);
-  sendSensitiveWarning({
-    fragments: hashedFragments,
-    severity: pendingSensitiveDetails.severity,
-    detectedTypes: pendingSensitiveDetails.detectedTypes,
-    matches: pendingSensitiveDetails.matches,
-    prompt: pendingSensitiveDetails.prompt,
-    sanitizedPrompt: pendingSensitiveDetails.maskedPrompt,
-  });
+  const details = pendingSensitiveDetails;
   pendingSensitiveDetails = null;
   sensitiveAlertTimer = null;
+
+  if (toastDelayTimer) {
+    clearTimeout(toastDelayTimer);
+  }
+  toastDelayTimer = setTimeout(() => {
+    processSensitiveAlert(details).catch((error) => {
+      console.error("VantaPrompt: Unable to process sensitive alert", error);
+    });
+  }, TOAST_DISPLAY_DELAY_MS);
+}
+
+async function processSensitiveAlert(details) {
+  if (!details) {
+    return;
+  }
+  sensitiveAlertHandledForCurrentPrompt = true;
+  redFlagSubmittedForCurrentPrompt = false;
+  const summary = details.detectedTypes.length
+    ? `Detected: ${details.detectedTypes.join(", ")} ??? Severity: ${details.severity}`
+    : `Severity: ${details.severity}`;
+  showSensitiveToast(details.maskedPrompt, summary);
+  replacePromptWithSanitizedText(details.maskedPrompt);
+  const hashedFragments = await hashFragments(details.fragments);
+  console.warn("VantaPrompt: ?s??,? Sensitive data detected:", hashedFragments);
+  sendSensitiveWarning({
+    fragments: hashedFragments,
+    severity: details.severity,
+    detectedTypes: details.detectedTypes,
+    matches: details.matches,
+    prompt: details.prompt,
+    sanitizedPrompt: details.maskedPrompt,
+  });
 }
 
 async function sendSensitiveWarning(details = {}) {
@@ -507,6 +540,112 @@ async function sendSensitiveWarning(details = {}) {
     });
   } catch (err) {
     console.error("VantaPrompt: logWarning send failed", err);
+  }
+}
+
+function reportSubmittedRedFlag(originalPrompt = "", fragments = []) {
+  if (!isRuntimeAvailable()) {
+    return;
+  }
+  if (!originalPrompt || !Array.isArray(fragments) || fragments.length === 0) {
+    return;
+  }
+  const detectedTypes = [
+    ...new Set(fragments.map((fragment) => fragment.type).filter(Boolean))
+  ];
+  const payload = {
+    prompt: originalPrompt,
+    detectedTypes,
+    severity: highestSeverityString(fragments),
+    source: isSupportedAIPlatform().platform || "unknown",
+    url: window.location.href,
+    submittedAt: new Date().toISOString(),
+    metadata: {
+      autoReplaced: autoReplaceAppliedForCurrentPrompt,
+      alertHandled: sensitiveAlertHandledForCurrentPrompt
+    }
+  };
+  console.warn("VantaPrompt: Submitted red flag payload", payload);
+  chrome.runtime.sendMessage(
+    {
+      action: "logSubmittedRedFlag",
+      payload
+    },
+    () => {
+      if (chrome.runtime.lastError) {
+        console.error("VantaPrompt: Error sending submitted red flag:", chrome.runtime.lastError);
+      }
+    }
+  );
+
+  submitRedFlagToBackend(payload).catch((error) => {
+    console.error("VantaPrompt: Direct submitted red flag send failed", error);
+  });
+}
+
+async function submitRedFlagToBackend(payload = {}) {
+  try {
+    await fetch(`${BACKEND_API_BASE}/dlp/submittedRedFlag`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        prompt: payload.prompt || "",
+        detectedTypes: payload.detectedTypes || [],
+        severity: payload.severity || "high",
+        source: payload.source || "extension",
+        url: payload.url || window.location.href,
+        submittedAt: payload.submittedAt || new Date().toISOString(),
+        metadata: payload.metadata || {},
+        workstation: navigator.userAgent
+      })
+    });
+  } catch (error) {
+    throw error;
+  }
+}
+
+async function notifyPromptSubmission(originalPrompt = "", maskedPrompt = "", fragments = []) {
+  if (!originalPrompt || !isRuntimeAvailable()) {
+    return;
+  }
+  try {
+    const promptHash = await hashFragment(originalPrompt);
+    const detectedTypes = [
+      ...new Set(fragments.map((fragment) => fragment.type).filter(Boolean))
+    ];
+    const matches = [
+      ...new Set(fragments.map((fragment) => fragment.fragment).filter(Boolean))
+    ];
+    const payload = {
+      prompt: originalPrompt,
+      promptHash,
+      sanitizedPrompt: maskedPrompt,
+      detectedTypes,
+      matches,
+      severity: highestSeverityString(fragments) || "low",
+      source: isSupportedAIPlatform().platform || "unknown",
+      url: window.location.href,
+      submittedAt: new Date().toISOString(),
+      metadata: {
+        sensitiveDetected: fragments.length > 0
+      }
+    };
+
+    chrome.runtime.sendMessage(
+      {
+        action: "finalPromptSubmitted",
+        payload
+      },
+      () => {
+        if (chrome.runtime.lastError) {
+          console.error("VantaPrompt: Error sending final prompt submission", chrome.runtime.lastError);
+        }
+      }
+    );
+  } catch (error) {
+    console.error("VantaPrompt: Unable to notify prompt submission", error);
   }
 }
 
@@ -552,6 +691,7 @@ function showAIPlatformModal() {
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
     text-align: center;
     animation: slideIn 0.3s ease-out;
+    position: relative;
   `;
 
   // Add animation keyframes
@@ -570,45 +710,77 @@ function showAIPlatformModal() {
   `;
   document.head.appendChild(style);
 
-  modal.innerHTML = `
-    <h2 style="margin: 0 0 15px 0; color: #333; font-size: 24px;">
-      🎉 VantaPrompt Detected ${platformName}!
-    </h2>
-    <p style="margin: 0 0 25px 0; color: #666; font-size: 16px; line-height: 1.5;">
-      You're visiting ${platformName}. Click the extension icon to open VantaPrompt!
-    </p>
-    <div style="display: flex; gap: 10px; justify-content: center;">
-      <button id="vantaprompt-open-btn" style="
-        background: #4CAF50;
-        color: white;
-        border: none;
-        padding: 12px 24px;
-        border-radius: 6px;
-        font-size: 14px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: background 0.2s;
-      ">Open Extension</button>
-      <button id="vantaprompt-close-btn" style="
-        background: #f5f5f5;
-        color: #333;
-        border: none;
-        padding: 12px 24px;
-        border-radius: 6px;
-        font-size: 14px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: background 0.2s;
-      ">Close</button>
-    </div>
+  const closeIconBtn = document.createElement('button');
+  closeIconBtn.type = 'button';
+  closeIconBtn.setAttribute('aria-label', 'Close popup');
+  closeIconBtn.style.cssText = `
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 32px;
+    height: 32px;
+    border-radius: 999px;
+    border: 1px solid #ddd;
+    background: #fff;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    color: #444;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
   `;
+  closeIconBtn.textContent = '×';
+
+  const heading = document.createElement('h2');
+  heading.textContent = `🎉 VantaPrompt Detected ${platformName}!`;
+  heading.style.cssText = 'margin: 0 0 15px 0; color: #333; font-size: 24px;';
+
+  const subtext = document.createElement('p');
+  subtext.textContent = `You're visiting ${platformName}. Click the extension icon to open VantaPrompt!`;
+  subtext.style.cssText = 'margin: 0 0 25px 0; color: #666; font-size: 16px; line-height: 1.5;';
+
+  const actionRow = document.createElement('div');
+  actionRow.style.cssText = 'display: flex; gap: 10px; justify-content: center;';
+
+  const openBtn = document.createElement('button');
+  openBtn.id = 'vantaprompt-open-btn';
+  openBtn.textContent = 'Open Extension';
+  openBtn.style.cssText = `
+    background: #4CAF50;
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s;
+  `;
+
+  const closeBtn = document.createElement('button');
+  closeBtn.id = 'vantaprompt-close-btn';
+  closeBtn.textContent = 'Close';
+  closeBtn.style.cssText = `
+    background: #f5f5f5;
+    color: #333;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s;
+  `;
+
+  actionRow.appendChild(openBtn);
+  actionRow.appendChild(closeBtn);
+
+  modal.appendChild(closeIconBtn);
+  modal.appendChild(heading);
+  modal.appendChild(subtext);
+  modal.appendChild(actionRow);
 
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
-
-  // Button handlers
-  const openBtn = document.getElementById('vantaprompt-open-btn');
-  const closeBtn = document.getElementById('vantaprompt-close-btn');
 
   openBtn.addEventListener('mouseenter', () => {
     openBtn.style.background = '#45a049';
@@ -631,14 +803,15 @@ function showAIPlatformModal() {
     overlay.remove();
   });
 
+  const closeModal = () => overlay.remove();
+
   // Close modal
-  closeBtn.addEventListener('click', () => {
-    overlay.remove();
-  });
+  closeBtn.addEventListener('click', closeModal);
+  closeIconBtn.addEventListener('click', closeModal);
 
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) {
-      overlay.remove();
+      closeModal();
     }
   });
 
@@ -646,7 +819,7 @@ function showAIPlatformModal() {
   setTimeout(() => {
     if (document.getElementById('vantaprompt-ai-modal')) {
       // Auto-click the close button to trigger its handler
-      closeBtn.click();
+      closeModal();
     }
   }, 1000);
 }
@@ -974,7 +1147,7 @@ function handleSendClick(event) {
 function logFinalPrompt(prompt) {
   if (prompt && prompt.trim() && prompt !== lastLoggedPrompt) {
     lastLoggedPrompt = prompt;
-    
+    const sensitiveFragments = detectSensitiveFragments(prompt);
     const maskedPrompt = maskSensitiveData(prompt);
 
     // Detect 12-digit numbers in final prompt
@@ -991,8 +1164,15 @@ function logFinalPrompt(prompt) {
     
     // Log warning if 12-digit numbers detected
     if (detectedNumbers.length > 0) {
-      console.warn('VantaPrompt: ⚠️ 12-digit number(s) detected in prompt:', detectedNumbers);
+      console.warn('VantaPrompt: ?s??,? 12-digit number(s) detected in prompt:', detectedNumbers);
     }
+
+    if (sensitiveAlertHandledForCurrentPrompt && !redFlagSubmittedForCurrentPrompt && sensitiveFragments.length > 0) {
+      console.warn("VantaPrompt: Submitted red flag captured for prompt containing sensitive data.");
+      reportSubmittedRedFlag(prompt, sensitiveFragments);
+      redFlagSubmittedForCurrentPrompt = true;
+    }
+    resetAutoReplaceState();
   }
 }
 
@@ -1003,6 +1183,7 @@ function showSensitiveToast(maskedPrompt = "", summary = "") {
     toast = document.createElement("div");
     toast.id = "vantaprompt-sensitive-toast";
     toast.innerHTML = `
+      <button id="vantaprompt-sensitive-close" class="toast-close-btn" aria-label="Dismiss alert">×</button>
       <span style="font-size:18px;">⚠️</span>
       <div style="flex:1; display:flex; flex-direction:column; gap:4px;">
         <strong style="font-size:14px;">VantaPrompt Alert</strong>
@@ -1034,6 +1215,23 @@ function showSensitiveToast(maskedPrompt = "", summary = "") {
           opacity: 0; pointer-events: none;
           transition: opacity 0.3s, transform 0.3s;
           transform: translateY(40px);
+        }
+        #vantaprompt-sensitive-toast .toast-close-btn {
+          position: absolute;
+          top: 8px;
+          right: 8px;
+          width: 24px;
+          height: 24px;
+          border: none;
+          border-radius: 50%;
+          background: transparent;
+          color: #856404;
+          font-size: 18px;
+          line-height: 1;
+          cursor: pointer;
+        }
+        #vantaprompt-sensitive-toast .toast-close-btn:hover {
+          background: rgba(0,0,0,0.05);
         }
         #vantaprompt-sensitive-toast.show {
           opacity: 1;
@@ -1084,6 +1282,11 @@ function showSensitiveToast(maskedPrompt = "", summary = "") {
         console.error("VantaPrompt: Clipboard copy failed", err);
       }
     };
+  }
+
+  const closeButton = toast.querySelector("#vantaprompt-sensitive-close");
+  if (closeButton) {
+    closeButton.onclick = hideSensitiveToast;
   }
   toast.classList.add("show");
   toast._vantapromptTimer && clearTimeout(toast._vantapromptTimer);
@@ -1274,6 +1477,7 @@ function handlePromptChange(event) {
           timestamp: new Date().toISOString()
         });
         console.log('VantaPrompt: Full prompt text:', lastPromptValue);
+        resetAutoReplaceState();
       }
       
       // Detect 12-digit numbers in the prompt

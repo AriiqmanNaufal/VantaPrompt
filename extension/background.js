@@ -133,6 +133,49 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }).catch((err) => console.error("VantaPrompt: logWarning failed", err));
     sendResponse({ success: true });
     return true;
+  } else if (request.action === "logSubmittedRedFlag") {
+    const payload = request.payload || {};
+    fetch(`${BACKEND_BASE}/dlp/submittedRedFlag`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        prompt: payload.prompt || "",
+        detectedTypes: payload.detectedTypes || [],
+        severity: payload.severity || "high",
+        source: payload.source || "unknown",
+        url: payload.url || "",
+        submittedAt: payload.submittedAt || new Date().toISOString(),
+        metadata: payload.metadata || {},
+        workstation: navigator.userAgent
+      })
+    }).catch((err) => console.error("VantaPrompt: submittedRedFlag failed", err));
+    sendResponse({ success: true });
+    return true;
+  } else if (request.action === "finalPromptSubmitted") {
+    const payload = request.payload || {};
+    fetch(`${BACKEND_BASE}/dlp/submitPrompt`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        prompt: payload.prompt || "",
+        promptHash: payload.promptHash || "",
+        sanitizedPrompt: payload.sanitizedPrompt || "",
+        detectedTypes: payload.detectedTypes || [],
+        matches: payload.matches || [],
+        severity: payload.severity || "low",
+        source: payload.source || "unknown",
+        url: payload.url || "",
+        submittedAt: payload.submittedAt || new Date().toISOString(),
+        metadata: payload.metadata || {},
+        workstation: navigator.userAgent
+      })
+    }).catch((err) => console.error("VantaPrompt: submitPrompt failed", err));
+    sendResponse({ success: true });
+    return true;
   }
   return true; // Keep the message channel open for async response
 });

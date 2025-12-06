@@ -1,5 +1,7 @@
 import { Router } from "express";
-import { DlpEvent } from "../models/DlpEvent.js";
+import mongoose from "mongoose";
+import WarningLog from "../models/WarningLog.js";
+import LlmResult from "../models/LlmResult.js";
 import { env } from "../config/env.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 
@@ -90,13 +92,6 @@ const combinedTypeArrayExpression = {
             as: "fragment",
             in: "$$fragment.type"
           }
-        },
-        {
-          $map: {
-            input: { $ifNull: ["$findings", []] },
-            as: "finding",
-            in: "$$finding.type"
-          }
         }
       ]
     },
@@ -152,7 +147,7 @@ const buildBaseMatch = (workspaceId, startDate) => {
     match.workspaceId = workspaceId;
   }
   if (startDate instanceof Date && !Number.isNaN(startDate.getTime())) {
-    match.timestamp = { $gte: startDate };
+    match.createdAt = { $gte: startDate };
   }
   return match;
 };
@@ -190,7 +185,47 @@ const redactPrompt = (prompt, fragments = [], matches = []) => {
   }, prompt);
 };
 
-const formatEventForResponse = (event) => {
+const resolveRawPrompt = (event = {}) => {
+  const candidates = [
+    event?.originalJson?.prompt,
+    event?.originalJson?.rawPrompt,
+    event?.originalJson?.rawText,
+    event?.originalJson?.text,
+    event?.originalJson?.input,
+    event?.rawText,
+    event?.prompt,
+    event?.redactedText,
+    event?.sanitizedPrompt
+  ];
+
+  return (
+    candidates.find((value) => typeof value === "string" && value.trim().length > 0) || ""
+  );
+};
+
+const formatLlmResult = (result) => {
+  if (!result) {
+    return null;
+  }
+
+  return {
+    _id: result._id?.toString(),
+    decision: result.decision,
+    risk: result.risk,
+    reason: result.reason,
+    safeAlternative: result.safeAlternative,
+    safeText: result.safeText,
+    provider: result.provider || result.metadata?.provider,
+    metadata: result.metadata || {},
+    severity: result.severity,
+    detectedTypes: result.detectedTypes || [],
+    sanitizedPrompt: result.sanitizedPrompt || "",
+    createdAt: result.createdAt,
+    updatedAt: result.updatedAt
+  };
+};
+
+const formatEventForResponse = (event = {}, llmResult = null) => {
   const detectedTypes = Array.from(
     new Set(
       []
@@ -199,25 +234,42 @@ const formatEventForResponse = (event) => {
     )
   );
 
-  const redacted =
+  const sanitizedText =
+    typeof event.sanitizedPrompt === "string" && event.sanitizedPrompt.trim().length > 0
+      ? event.sanitizedPrompt
+      : "";
+  const fallbackRedacted =
     event.redactedText && event.redactedText.trim().length
       ? event.redactedText
       : redactPrompt(event.originalJson?.prompt, event.fragments, event.matches);
+  const redacted = sanitizedText || fallbackRedacted || "";
+  const timestamp = event.timestamp || event.createdAt || event.updatedAt || null;
 
   return {
     _id: event._id?.toString(),
-    timestamp: event.timestamp,
-    userId: event.userId,
-    severity: event.severity,
-    actionTaken: event.actionTaken,
-    redactedText: redacted || "",
+    workspaceId: event.workspaceId || "",
+    timestamp,
+    createdAt: event.createdAt,
+    updatedAt: event.updatedAt,
+    userId: event.userId || "",
+    severity: event.severity || null,
+    actionTaken: event.actionTaken || "",
+    redactedText: redacted,
+    sanitizedPrompt: redacted,
     detectedTypes,
-    allowed: event.allowed,
-    source: event.source,
-    workstation: event.workstation,
-    matches: event.matches,
-    fragments: event.fragments,
-    ipAddress: event.ipAddress
+    allowed: Boolean(event.allowed),
+    source: event.source || "",
+    workstation: event.workstation || "",
+    matches: event.matches || [],
+    fragments: event.fragments || [],
+    findings: event.findings || [],
+    ipAddress: event.ipAddress || "",
+    originalJson: event.originalJson || null,
+    originalHash: event.originalHash || event.originalJsonHash,
+    rawPrompt: resolveRawPrompt(event) || redacted,
+    latencyMs: event.latencyMs,
+    modelUsed: event.modelUsed,
+    llmResult: formatLlmResult(llmResult)
   };
 };
 
@@ -228,7 +280,7 @@ router.get(
     const { timeframe, startDate } = resolveRange(req.query);
     const match = buildBaseMatch(workspaceId, startDate);
 
-    const [result] = await DlpEvent.aggregate([
+    const [result] = await WarningLog.aggregate([
       { $match: match },
       severityStage(),
       {
@@ -256,7 +308,7 @@ router.get(
             { $sort: { count: -1 } },
             { $limit: 5 }
           ],
-          lastEvent: [{ $sort: { timestamp: -1 } }, { $limit: 1 }]
+          lastEvent: [{ $sort: { createdAt: -1 } }, { $limit: 1 }]
         }
       }
     ]);
@@ -274,7 +326,10 @@ router.get(
       count: row.count
     }));
 
-    const lastEventTimestamp = result?.lastEvent?.[0]?.timestamp?.toISOString() || null;
+    const lastEventTimestamp =
+      result?.lastEvent?.[0]?.createdAt instanceof Date
+        ? result.lastEvent[0].createdAt.toISOString()
+        : null;
 
     return res.json({
       totalEvents: totals.totalEvents,
@@ -300,14 +355,14 @@ router.get(
     const useHourly = durationMs < 48 * 60 * 60 * 1000;
     const unit = useHourly ? "hour" : "day";
 
-    const buckets = await DlpEvent.aggregate([
+    const buckets = await WarningLog.aggregate([
       { $match: match },
       severityStage(),
       {
         $group: {
           _id: {
             $dateTrunc: {
-              date: "$timestamp",
+              date: "$createdAt",
               unit,
               timezone
             }
@@ -366,8 +421,7 @@ router.get(
       const regex = new RegExp(escapeRegex(req.query.search), "i");
       andConditions.push({
         $or: [
-          { redactedText: regex },
-          { "originalJson.prompt": regex },
+          { sanitizedPrompt: regex },
           { matches: regex }
         ]
       });
@@ -380,14 +434,29 @@ router.get(
       pipeline.push({ $match: {} });
     }
 
-    pipeline.push(severityStage());
+    pipeline.push(
+      severityStage(),
+      {
+        $lookup: {
+          from: "llmresults",
+          localField: "_id",
+          foreignField: "warningLogId",
+          as: "llmResult"
+        }
+      },
+      {
+        $addFields: {
+          llmResult: { $arrayElemAt: ["$llmResult", 0] }
+        }
+      }
+    );
 
     if (severityParam) {
       pipeline.push({ $match: { normalizedSeverity: severityParam } });
     }
 
     pipeline.push(
-      { $sort: { timestamp: -1 } },
+      { $sort: { createdAt: -1 } },
       {
         $facet: {
           total: [{ $count: "value" }],
@@ -396,11 +465,12 @@ router.get(
             { $limit: limit },
             {
               $project: {
-                timestamp: 1,
+                timestamp: "$createdAt",
                 userId: 1,
                 severity: "$normalizedSeverity",
                 actionTaken: 1,
-                redactedText: 1,
+                redactedText: "$sanitizedPrompt",
+                sanitizedPrompt: 1,
                 detectedTypes: combinedTypeArrayExpression,
                 fragments: 1,
                 matches: 1,
@@ -408,7 +478,15 @@ router.get(
                 source: 1,
                 workstation: 1,
                 originalJson: 1,
-                ipAddress: 1
+                findings: 1,
+                ipAddress: 1,
+                workspaceId: 1,
+                originalHash: 1,
+                latencyMs: 1,
+                modelUsed: 1,
+                createdAt: 1,
+                updatedAt: 1,
+                llmResult: 1
               }
             }
           ]
@@ -416,10 +494,12 @@ router.get(
       }
     );
 
-    const [result] = await DlpEvent.aggregate(pipeline);
+    const [result] = await WarningLog.aggregate(pipeline);
     const total = result?.total?.[0]?.value || 0;
 
-    const events = (result?.events || []).map((event) => formatEventForResponse(event));
+    const events = (result?.events || []).map((event) =>
+      formatEventForResponse(event, event.llmResult)
+    );
 
     return res.json({
       page,
@@ -432,13 +512,38 @@ router.get(
 );
 
 router.get(
+  "/events/:id",
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    if (!id) {
+      throw buildBadRequest("Event id is required.");
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      const error = buildBadRequest("Invalid event id provided.");
+      error.status = 404;
+      throw error;
+    }
+
+    const event = await WarningLog.findById(id).lean();
+    if (!event) {
+      return res.status(404).json({ message: "Event not found" });
+    }
+
+    const llmResult = await LlmResult.findOne({ warningLogId: event._id }).lean();
+
+    return res.json({ event: formatEventForResponse(event, llmResult) });
+  })
+);
+
+router.get(
   "/typeBreakdown",
   asyncHandler(async (req, res) => {
     const { workspaceId } = req.query;
     const { timeframe, startDate } = resolveRange(req.query);
     const match = buildBaseMatch(workspaceId, startDate);
 
-    const types = await DlpEvent.aggregate([
+    const types = await WarningLog.aggregate([
       { $match: match },
       {
         $project: {
@@ -469,14 +574,14 @@ router.get(
     const match = buildBaseMatch(workspaceId, startDate);
     const timezone = resolveTimezone(req.query.tz);
 
-    const trend = await DlpEvent.aggregate([
+    const trend = await WarningLog.aggregate([
       { $match: match },
       severityStage(),
       {
         $group: {
           _id: {
             $dateTrunc: {
-              date: "$timestamp",
+              date: "$createdAt",
               unit: "day",
               timezone
             }

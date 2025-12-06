@@ -1,111 +1,169 @@
 import crypto from "crypto";
 
-const passesLuhn = (value = "") => {
-  const digits = value.replace(/[\s-]/g, "");
-  if (!/^\d{13,16}$/.test(digits)) {
-    return false;
-  }
-
-  let sum = 0;
-  let shouldDouble = false;
-  for (let i = digits.length - 1; i >= 0; i -= 1) {
-    let digit = Number(digits[i]);
-    if (shouldDouble) {
-      digit *= 2;
-      if (digit > 9) digit -= 9;
-    }
-    sum += digit;
-    shouldDouble = !shouldDouble;
-  }
-
-  return sum % 10 === 0;
+const SEVERITY_ORDER = {
+  low: 1,
+  medium: 2,
+  high: 3,
+  critical: 4,
 };
 
-const PATTERNS = [
-  {
-    type: "EMAIL",
-    regex: /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi,
-    severity: "medium"
-  },
-  {
-    type: "IC",
-    regex: /\b(?:ic|id)[-\s]*\d{4,}\b/gi,
-    severity: "high"
-  },
-  {
-    type: "ACCOUNT_NUM",
-    regex: /\b\d{8,12}\b/g,
-    severity: "high"
-  },
-  {
-    type: "CREDIT_CARD",
-    regex: /\b(?:\d[ -]?){13,16}\b/g,
-    severity: "critical",
-    validator: (value) => passesLuhn(value)
-  }
-];
-
-const ensureGlobalRegex = (regex) => {
-  const flags = regex.flags.includes("g") ? regex.flags : `${regex.flags}g`;
-  return new RegExp(regex.source, flags);
+const severityLevel = (value = "critical") => {
+  const normalized = String(value || "critical").trim().toLowerCase();
+  return SEVERITY_ORDER[normalized] || SEVERITY_ORDER.critical;
 };
 
-const hashValue = (value) => {
+const toPriority = (value) => {
+  const parsed = Number(value);
+  if (Number.isFinite(parsed) && parsed >= 0) {
+    return parsed;
+  }
+  return 9999;
+};
+
+const hashValue = (value = "") => {
   return crypto.createHash("sha256").update(value).digest("hex");
 };
 
-export const analyzePrompt = (prompt) => {
-  let redacted = prompt;
-  const findings = [];
-  const detected = new Set();
-
-  PATTERNS.forEach((pattern) => {
-    const regex = ensureGlobalRegex(pattern.regex);
-    redacted = redacted.replace(regex, (match) => {
-      const fragment = match.trim();
-      if (!fragment) {
-        return match;
-      }
-
-      if (pattern.validator && !pattern.validator(fragment)) {
-        return match;
-      }
-
-      findings.push({
-        type: pattern.type,
-        fragmentHash: hashValue(fragment)
-      });
-      detected.add(pattern.type);
-
-      return `[REDACTED:${pattern.type}]`;
-    });
-  });
-
-  return {
-    redactedText: redacted,
-    findings,
-    detectedTypes: Array.from(detected),
-    highestSeverity: determineHighestSeverity(Array.from(detected))
-  };
+const buildRegex = (pattern, flags = "g") => {
+  if (!pattern) {
+    return null;
+  }
+  const normalizedFlags = flags.includes("g") ? flags : `${flags}g`;
+  try {
+    return new RegExp(pattern, normalizedFlags);
+  } catch {
+    return null;
+  }
 };
 
-const determineHighestSeverity = (types) => {
-  if (!types.length) {
-    return "low";
-  }
-
-  const order = { low: 0, medium: 1, high: 2, critical: 3 };
-  let highest = "low";
-
-  types.forEach((type) => {
-    const pattern = PATTERNS.find((entry) => entry.type === type);
-    if (!pattern) return;
-
-    const current = pattern.severity || "low";
-    if (order[current] > order[highest]) {
-      highest = current;
+const collectFragments = (prompt = "", definitions = []) => {
+  const fragments = [];
+  definitions.forEach((definition) => {
+    const regex = buildRegex(definition.pattern, definition.flags || "g");
+    if (!regex) {
+      return;
+    }
+    let match;
+    while ((match = regex.exec(prompt)) !== null) {
+      const fragment = match[0];
+      if (!fragment) {
+        continue;
+      }
+      const start = match.index;
+      const end = start + fragment.length;
+      fragments.push({
+        type: definition.type,
+        fragment,
+        start,
+        end,
+        length: fragment.length,
+        severity: definition.severity || "critical",
+        priority: toPriority(definition.priority),
+        fragmentHash: hashValue(fragment),
+      });
+      if (match.index === regex.lastIndex) {
+        regex.lastIndex += 1;
+      }
     }
   });
+  return fragments;
+};
 
-  return highest;
+const definitionByType = (definitions, type) => {
+  return definitions.find((definition) => definition.type === type);
+};
+
+const fragmentMatchesDefinition = (fragment, definition) => {
+  if (!fragment || !definition) {
+    return false;
+  }
+  const regex = buildRegex(definition.pattern, definition.flags || "g");
+  if (!regex) {
+    return false;
+  }
+  return regex.test(fragment);
+};
+
+const filterAccountNumberNoise = (fragments = [], definitions = []) => {
+  const phoneDefinition = definitionByType(definitions, "PHONE");
+  const malaysiaDefinition = definitionByType(definitions, "MALAYSIA_IC_COMPACT");
+
+  return fragments.filter((fragment) => {
+    if (fragment.type !== "ACCOUNT_NUM") {
+      return true;
+    }
+    if (fragmentMatchesDefinition(fragment.fragment, phoneDefinition)) {
+      return false;
+    }
+    if (fragmentMatchesDefinition(fragment.fragment, malaysiaDefinition)) {
+      return false;
+    }
+    return true;
+  });
+};
+
+const buildSanitizedPrompt = (prompt = "", fragments = []) => {
+  if (!prompt || fragments.length === 0) {
+    return prompt;
+  }
+  const sorted = [...fragments].sort((a, b) => {
+    if (a.start !== b.start) {
+      return a.start - b.start;
+    }
+    if (a.priority !== b.priority) {
+      return a.priority - b.priority;
+    }
+    if (a.length !== b.length) {
+      return b.length - a.length;
+    }
+    return severityLevel(b.severity) - severityLevel(a.severity);
+  });
+
+  const parts = [];
+  let cursor = 0;
+  sorted.forEach((fragment) => {
+    if (fragment.start < cursor) {
+      return;
+    }
+    parts.push(prompt.slice(cursor, fragment.start));
+    parts.push(`[${fragment.type}]`);
+    cursor = fragment.end;
+  });
+  parts.push(prompt.slice(cursor));
+  return parts.join("");
+};
+
+const determineHighestSeverity = (fragments = []) => {
+  if (!fragments.length) {
+    return "low";
+  }
+  return fragments.reduce((current, fragment) => {
+    if (severityLevel(fragment.severity) > severityLevel(current)) {
+      return fragment.severity;
+    }
+    return current;
+  }, fragments[0].severity || "critical");
+};
+
+export const analyzePrompt = (prompt = "", regexDefinitions = []) => {
+  const collectedFragments = collectFragments(prompt, regexDefinitions);
+  const filteredFragments = filterAccountNumberNoise(collectedFragments, regexDefinitions);
+  const sanitizedPrompt = buildSanitizedPrompt(prompt, filteredFragments);
+  const findings = filteredFragments.map((fragment) => ({
+    type: fragment.type,
+    fragmentHash: fragment.fragmentHash,
+    severity: fragment.severity,
+  }));
+  const detectedTypes = Array.from(
+    new Set(filteredFragments.map((fragment) => fragment.type).filter(Boolean))
+  );
+  const highestSeverity = determineHighestSeverity(filteredFragments);
+
+  return {
+    redactedText: sanitizedPrompt,
+    fragments: filteredFragments,
+    findings,
+    detectedTypes,
+    highestSeverity,
+  };
 };
