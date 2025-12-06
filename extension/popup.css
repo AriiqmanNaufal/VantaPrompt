@@ -65,6 +65,11 @@ p {
   display: none;
 }
 
+.status.error {
+  background: #fdecea;
+  color: #c62828;
+}
+
 .status.show {
   display: block;
 }

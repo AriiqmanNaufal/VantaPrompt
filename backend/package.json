@@ -1,11 +1,25 @@
-﻿{
-  "name": "vantaprompt-backend",
+{
+  "name": "vantaprompt-dashboard-backend",
+  "version": "0.1.0",
   "private": true,
-  "version": "0.0.0",
+  "type": "module",
+  "description": "Dashboard analytics backend for VantaPrompt",
+  "main": "src/server.js",
   "scripts": {
-    "dev": "node server.js",
-    "test": "node backend/tests/backend.test.js"
+    "dev": "node src/server.js",
+    "start": "node src/server.js",
+    "test": "cross-env NODE_ENV=test NODE_OPTIONS=--experimental-vm-modules jest --runInBand"
   },
-  "dependencies": {},
-  "devDependencies": {}
+  "dependencies": {
+    "cors": "^2.8.5",
+    "csv-stringify": "^6.5.1",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "helmet": "^7.1.0",
+    "mongoose": "^8.5.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "cross-env": "^7.0.3"
+  }
 }
