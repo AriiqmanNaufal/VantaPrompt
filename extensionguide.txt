@@ -1,0 +1,6 @@
+Utk nak check connection to backend: Click extension icon, then click connect to db
+
+Prompt yg confirm jadi
+
+test usr@amop.com
+test 010203-04-0567
