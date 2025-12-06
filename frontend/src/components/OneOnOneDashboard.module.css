@@ -24,19 +24,20 @@
 .logoBlock {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-}
-
-.logoMark {
-  font-size: 22px;
-  letter-spacing: 0.08em;
-  font-weight: 700;
+  gap: 10px;
+  justify-content: center;
 }
 
 .userName {
   font-size: 16px;
   font-weight: 600;
   color: #e3dffd;
+}
+
+.logoImage {
+  width: 140px;
+  height: auto;
+  object-fit: contain;
 }
 
 .navList {
@@ -70,6 +71,15 @@
   background: rgba(123, 92, 250, 0.3);
   border-left-color: #b9a8ff;
   color: #ffffff;
+}
+
+.navLink {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  color: inherit;
+  text-decoration: none;
 }
 
 .navIcon {
@@ -391,6 +401,183 @@
   border-bottom: 1px solid #efeaf9;
   vertical-align: top;
   color: #322b4e;
+}
+
+.sectionLabel {
+  font-size: 0.75rem;
+  letter-spacing: 0.35em;
+  text-transform: uppercase;
+  color: #9a8ac8;
+}
+
+.chartPanel {
+  background: #ffffff;
+  border-radius: 32px;
+  padding: 32px;
+  box-shadow: 0 25px 50px rgba(15, 11, 41, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.chartPanelTop {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.chartPanelTitle {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #1f1439;
+}
+
+.chartGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.chartCard {
+  background: #f9f7ff;
+  border-radius: 20px;
+  padding: 18px;
+  border: 1px solid rgba(15, 11, 41, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chartValueRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.chartBadge {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 2px solid;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  color: #1f1439;
+  background: #ffffff;
+}
+
+.chartCardTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: #5c5079;
+  margin: 0;
+}
+
+.chartCardValue {
+  font-size: 28px;
+  font-weight: 700;
+  color: #22164c;
+  margin: 0;
+}
+
+.chartProgress {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(120, 111, 197, 0.25);
+  overflow: hidden;
+}
+
+.chartProgressFill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.chartCardDetail {
+  font-size: 13px;
+  color: #65547e;
+  margin: 0;
+}
+/* 
+.promptsTableWrapper {
+  background: #ffffff;
+  border-radius: 32px;
+  padding: 32px;
+  box-shadow: 0 25px 50px rgba(15, 11, 41, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+} */
+
+.promptsTableHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.promptsDescription {
+  color: #5c5079;
+  font-size: 14px;
+  margin: 0;
+}
+
+.promptsTable {
+  border: 1px solid rgba(46, 17, 92, 0.1);
+  border-radius: 20px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: #f8f6ff;
+}
+
+.promptsTableRowPromptsHeader,
+.promptsTableRow {
+  display: grid;
+  grid-template-columns: 1fr 3fr 1fr;
+  gap: 16px;
+  align-items: center;
+  font-size: 14px;
+}
+
+.promptsTableRowPromptsHeader {
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  font-weight: 600;
+  color: #4b3d7c;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+}
+
+.promptsTableRow {
+  background: #ffffff;
+  padding: 14px 18px;
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(15, 11, 41, 0.05);
+  color: #2a1c47;
+}
+
+.promptText {
+  font-weight: 500;
+}
+
+.severityTag {
+  justify-self: flex-end;
+  font-weight: 600;
+  color: #ffffff;
+  background: linear-gradient(135deg, #ef4444, #fb923c);
+  padding: 6px 16px;
+  border-radius: 999px;
+  text-transform: capitalize;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .personCell {
