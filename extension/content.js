@@ -848,7 +848,8 @@ function handlePromptChange(event) {
       const detectedNumbers = detect12DigitNumber(currentValue);
       const sensitiveFragments = detectSensitiveFragments(currentValue);
       const allMatches = [...new Set([...detectedNumbers, ...sensitiveFragments.map(f => f.fragment)])];
-      if (allMatches.length > 0) {
+      const hasMatches = allMatches.length > 0;
+      if (hasMatches) {
         console.log('VantaPrompt: Sensitive data detected in prompt:', {
           matches: allMatches,
           fragments: sensitiveFragments,
@@ -867,7 +868,8 @@ function handlePromptChange(event) {
       lastPromptValue = currentValue;
       
       // Send prompt to background script
-      chrome.runtime.sendMessage({
+      if (hasMatches) {
+        chrome.runtime.sendMessage({
         action: 'promptChanged',
         prompt: currentValue,
         promptLength: currentValue.length,
@@ -884,7 +886,22 @@ function handlePromptChange(event) {
           }
         }
       });
-    }
+        chrome.runtime.sendMessage({
+          action: "logWarning",
+          matches: allMatches,
+          fragments: sensitiveFragments,
+          severity:
+            sensitiveFragments.length > 0
+              ? Math.max(...sensitiveFragments.map((f) => severityLevel(f.severity)))
+              : severityLevel("medium"),
+          source: isSupportedAIPlatform().platform,
+          original: {
+            prompt: currentValue,
+            consoleMatches: sensitiveFragments,
+          },
+          actionTaken: "masked",
+        });
+      }
   }, 300); // 300ms debounce
 }
 
