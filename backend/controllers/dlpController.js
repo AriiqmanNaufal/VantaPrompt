@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { DlpEvent } from "../models/DlpEvent.js";
+import WarningLog from "../models/WarningLog.js";
 import { analyzePrompt } from "../utils/promptAnalyzer.js";
 
 const severityActionMap = {
@@ -42,6 +43,30 @@ export const checkPrompt = async (req, res, next) => {
     };
 
     const createdEvent = await DlpEvent.create(eventPayload);
+
+    await WarningLog.create({
+      workspaceId,
+      userId,
+      workstation: req.headers["user-agent"],
+      source,
+      matches: detectedTypes,
+      detectedTypes,
+      fragments: findings.map((finding) => ({
+        type: finding.type,
+        fragment: `[HASH:${finding.fragmentHash?.slice(0, 6) || "XXX"}]`,
+        severity: highestSeverity
+      })),
+      severity: highestSeverity,
+      normalizedSeverity: highestSeverity,
+      allowed: decision.allowed,
+      actionTaken: decision.actionTaken,
+      originalJson: {
+        redactedText,
+        detectedTypes,
+        findings
+      },
+      timestamp: eventPayload.timestamp
+    });
 
     return res.json({
       allowed: decision.allowed,

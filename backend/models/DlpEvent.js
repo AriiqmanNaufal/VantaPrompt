@@ -5,30 +5,44 @@ const { Schema } = mongoose;
 
 const FindingSchema = new Schema(
   {
-    type: { type: String, required: true },
-    fragmentHash: { type: String, required: true }
+    type: { type: String },
+    fragmentHash: { type: String }
+  },
+  { _id: false }
+);
+
+const FragmentSchema = new Schema(
+  {
+    type: { type: String },
+    fragment: { type: String },
+    severity: { type: String },
+    fragmentHash: { type: String }
   },
   { _id: false }
 );
 
 const DlpEventSchema = new Schema(
   {
-    workspaceId: { type: String, required: true, trim: true, index: true },
-    userId: { type: String, required: true, trim: true },
-    originalHash: { type: String, required: true },
-    redactedText: { type: String, required: true },
-    detectedTypes: { type: [String], default: [] },
-    findings: { type: [FindingSchema], default: [] },
-    severity: { type: String, enum: ["low", "medium", "high", "critical"], required: true, index: true },
-    allowed: { type: Boolean, required: true },
-    actionTaken: {
-      type: String,
-      enum: ["allowed", "blocked", "rewrite", "manual_review"],
-      required: true
-    },
-    timestamp: { type: Date, default: Date.now },
+    workspaceId: { type: String, trim: true, index: true },
+    userId: { type: String, trim: true },
+    workstation: { type: String },
     source: { type: String, default: "web" },
     modelUsed: { type: String },
+    matches: { type: [String], default: [] },
+    fragments: { type: [FragmentSchema], default: [] },
+    findings: { type: [FindingSchema], default: [] },
+    detectedTypes: { type: [String], default: [] },
+    originalHash: { type: String },
+    redactedText: { type: String },
+    severity: { type: Schema.Types.Mixed, index: true },
+    allowed: { type: Boolean },
+    actionTaken: {
+      type: String,
+      enum: ["allowed", "blocked", "rewrite", "manual_review", "masked", "manual_review_pending"]
+    },
+    timestamp: { type: Date, default: Date.now },
+    originalJson: { type: Schema.Types.Mixed },
+    ipAddress: { type: String },
     latencyMs: { type: Number, min: 0 }
   },
   {
@@ -39,6 +53,8 @@ const DlpEventSchema = new Schema(
 DlpEventSchema.index({ workspaceId: 1, timestamp: -1 });
 DlpEventSchema.index({ severity: 1, timestamp: -1 });
 DlpEventSchema.index({ detectedTypes: 1 });
+DlpEventSchema.index({ "fragments.type": 1 });
+DlpEventSchema.index({ actionTaken: 1, timestamp: -1 });
 
 const ttlDays = Number(env.eventTtlDays);
 if (ttlDays && ttlDays > 0) {

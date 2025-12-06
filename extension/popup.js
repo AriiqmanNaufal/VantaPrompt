@@ -20,8 +20,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // Load monitored prompt
   loadMonitoredPrompt();
 
-  actionBtn.addEventListener("click", () => {
-    chrome.storage.local.get(["clickCount"], (result) => {
+  // Button click handler
+  actionBtn.addEventListener('click', () => {
+    // Get current count
+    chrome.storage.local.get(['clickCount'], (result) => {
       const newCount = (result.clickCount || 0) + 1;
       chrome.storage.local.set({ clickCount: newCount }, () => {
         updateStatus(`Button clicked ${newCount} time${newCount !== 1 ? "s" : ""}`);
@@ -51,17 +53,61 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     );
   });
+
+  dbStatusBtn.addEventListener('click', () => {
+    dbStatus.textContent = 'Checking...';
+    chrome.runtime.sendMessage({ action: 'checkDbStatus' }, (response) => {
+      if (response?.success) {
+        dbStatus.textContent = `MongoDB connection: ${response.status}`;
+      } else {
+        dbStatus.textContent = 'Unable to reach backend.';
+      }
+    });
+  });
 });
+
+// Load the monitored prompt from background script
+function loadMonitoredPrompt() {
+  // Get current active tab
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (tabs[0] && tabs[0].id) {
+      chrome.runtime.sendMessage({ 
+        action: 'getMonitoredPrompt',
+        tabId: tabs[0].id
+      }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.error('Error getting prompt:', chrome.runtime.lastError);
+          return;
+        }
+
+        if (response && response.success && response.prompt) {
+          // Display the prompt
+          promptContent.textContent = response.prompt;
+          const length = response.promptLength || response.prompt.length;
+          const timestamp = response.timestamp ? new Date(response.timestamp).toLocaleTimeString() : 'Just now';
+          promptInfo.textContent = `${length} characters • ${timestamp}`;
+          
+          // Display 12-digit number detection
+          if (response.has12DigitNumber && response.detectedNumbers && response.detectedNumbers.length > 0) {
+            displayDetectedNumbers(response.detectedNumbers);
+          } else {
+            hideDetectedNumbers();
+          }
+          
+          promptMonitor.style.display = 'block';
+        } else {
+          promptMonitor.style.display = 'none';
+          hideDetectedNumbers();
+        }
+      });
+    }
+  });
+}
 
 function updateStatus(message, isError = false) {
   const status = document.getElementById("status");
   status.textContent = message;
-  status.classList.add("show");
-  if (isError) {
-    status.classList.add("error");
-  } else {
-    status.classList.remove("error");
-  }
+  status.classList.add('show');
 }
 
 // Display detected 12-digit numbers
