@@ -1,9 +1,9 @@
 {
-  "name": "vantaprompt-backend",
-  "private": true,
+  "name": "vantaprompt",
   "version": "0.1.0",
-  "description": "Express backend scaffold for the VantaPrompt AI DLP platform",
+  "private": true,
   "type": "module",
+  "description": "VantaPrompt DLP event logger and analytics backend",
   "main": "server.js",
   "scripts": {
     "dev": "node server.js",

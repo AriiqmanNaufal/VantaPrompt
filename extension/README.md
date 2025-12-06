@@ -38,6 +38,16 @@ A simple Chrome extension boilerplate for VantaPrompt.
 - Add functionality in `popup.js` and `background.js`
 - Update `content.js` to interact with web pages
 - Add permissions in `manifest.json` as needed
+- Update `config.js` to point the extension at your local/server API (base URL and API key)
+
+## Backend Connectivity
+
+The extension expects the VantaPrompt backend to expose:
+
+- `GET /extension/status` (public) – handshake + metadata
+- `POST /extension/validatePrompt` (requires `x-api-key`) – validates prompts via the backend DLP service
+
+Set the backend base URL and API key inside `extension/config.js` so background/popup scripts can talk to the API. In production, store secrets securely and avoid committing real keys.
 
 ## Icons
 

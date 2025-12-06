@@ -2,6 +2,8 @@ import mongoose from "mongoose";
 
 const warningLogSchema = new mongoose.Schema(
   {
+    workspaceId: { type: String, index: true },
+    userId: { type: String },
     workstation: { type: String },
     source: { type: String },
     promptHash: { type: String },
@@ -14,7 +16,9 @@ const warningLogSchema = new mongoose.Schema(
     ipAddress: { type: String },
     originalJsonHash: { type: String },
   },
-  { timestamps: { createdAt: "timestamp", updatedAt: false } }
+  { timestamps: { createdAt: "createdAt", updatedAt: "updatedAt" } }
 );
+
+warningLogSchema.index({ timestamp: -1 });
 
 export default mongoose.models.WarningLog || mongoose.model("WarningLog", warningLogSchema);

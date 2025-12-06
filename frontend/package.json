@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "vantaprompt-frontend",
   "private": true,
   "version": "0.0.0",
@@ -7,6 +7,13 @@
     "build": "next build",
     "start": "next start"
   },
-  "dependencies": {},
-  "devDependencies": {}
+  "dependencies": {
+    "next": "^16.0.7",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.7",
+    "typescript": "5.9.3"
+  }
 }

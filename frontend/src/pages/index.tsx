@@ -1,13 +1,8 @@
-﻿import React from "react";
-import { PromptInput } from "../components/PromptInput";
+import React from "react";
+import { OneOnOneDashboard } from "../components/OneOnOneDashboard";
 
 const HomePage: React.FC = () => {
-  return (
-    <main>
-      <h1>VantaPrompt UI Placeholder</h1>
-      <PromptInput />
-    </main>
-  );
+  return <OneOnOneDashboard />;
 };
 
 export default HomePage;

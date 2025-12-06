@@ -12,8 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const closeBtn = document.getElementById('closeBtn');
   const container = document.querySelector('.container');
 
-  // Load saved state
-  chrome.storage.local.get(['clickCount'], (result) => {
+  chrome.storage.local.get(["clickCount"], (result) => {
     const count = result.clickCount || 0;
     if (count > 0) {
       updateStatus(`Button clicked ${count} times`);
@@ -35,17 +34,33 @@ document.addEventListener('DOMContentLoaded', () => {
     // Get current count
     chrome.storage.local.get(['clickCount'], (result) => {
       const newCount = (result.clickCount || 0) + 1;
-      
-      // Save new count
       chrome.storage.local.set({ clickCount: newCount }, () => {
-        updateStatus(`Button clicked ${newCount} time${newCount !== 1 ? 's' : ''}`);
+        updateStatus(`Button clicked ${newCount} time${newCount !== 1 ? "s" : ""}`);
       });
     });
 
-    // Send message to background script
-    chrome.runtime.sendMessage({ action: 'buttonClicked' }, (response) => {
-      console.log('Response from background:', response);
-    });
+    const promptPayload = `Extension button triggered at ${new Date().toISOString()}`;
+    chrome.runtime.sendMessage(
+      {
+        action: "buttonClicked",
+        prompt: promptPayload
+      },
+      (response) => {
+        if (chrome.runtime.lastError) {
+          updateStatus("Backend connection failed. See console for details.", true);
+          console.error("Extension -> backend error", chrome.runtime.lastError);
+          return;
+        }
+
+        if (response?.success) {
+          const result = response.result || {};
+          const statusMsg = `Backend decision: ${result.allowed ? "Allowed" : "Blocked"} via ${result.provider}`;
+          updateStatus(statusMsg);
+        } else {
+          updateStatus(response?.error || "Backend request failed.", true);
+        }
+      }
+    );
   });
 
   dbStatusBtn.addEventListener('click', () => {
@@ -98,8 +113,8 @@ function loadMonitoredPrompt() {
   });
 }
 
-function updateStatus(message) {
-  const status = document.getElementById('status');
+function updateStatus(message, isError = false) {
+  const status = document.getElementById("status");
   status.textContent = message;
   status.classList.add('show');
 }

@@ -4,7 +4,11 @@ import dotenv from "dotenv";
 import mongoose from "mongoose";
 import dlpRoute from "./routes/dlpRoute.js";
 import llmRoute from "./routes/llmRoute.js";
+import dashboardRoute from "./routes/dashboardRoute.js";
+import { connectDatabase } from "./config/database.js";
+import { env } from "./config/env.js";
 import { logEvent } from "./utils/logger.js";
+import { errorHandler, notFoundHandler } from "./middlewares/errorHandler.js";
 
 dotenv.config();
 
@@ -36,10 +40,23 @@ app.get("/health", (_req, res) => {
   res.json({ service: "VantaPrompt backend", status: "ok" });
 });
 
-const PORT = process.env.PORT || 5000;
+app.use("/dlp", dlpRoute);
+app.use("/llm", llmRoute);
+app.use("/dashboard", dashboardRoute);
 
-app.listen(PORT, () => {
-  logEvent(`VantaPrompt backend listening on port ${PORT}`);
+app.use(notFoundHandler);
+app.use(errorHandler);
+
+const start = async () => {
+  await connectDatabase();
+  app.listen(env.port, () => {
+    logEvent(`VantaPrompt backend listening on port ${env.port}`);
+  });
+};
+
+start().catch((error) => {
+  logEvent("Failed to start backend", { message: error.message });
+  process.exit(1);
 });
 
 export default app;
